@@ -1,0 +1,31 @@
+# Sensitive sample data (PII - do not commit)
+*.pdf
+*.xlsx
+!requirements.txt
+!vercel.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Output
+output/
+e2e_result.png
+
+# Logs
+server.log
+*.log
+
+# Temp
+*.tmp
+tmp/
+*.command
+_probe.py
+_w
+_check.py

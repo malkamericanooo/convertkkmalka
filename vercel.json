@@ -8,10 +8,5 @@
     { "src": "/api/convert", "dest": "/api/convert.py" },
     { "src": "/api/dl", "dest": "/api/convert.py" },
     { "src": "/(.*)", "dest": "/api/index.html" }
-  ],
-  "functions": {
-    "api/convert.py": {
-      "maxDuration": 60
-    }
-  }
+  ]
 }

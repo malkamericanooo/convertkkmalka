@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konverter Rekapitulasi KK</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--accent:#10b981;--accent2:#34d399;
+      --txt:#e2e8f0;--mut:#94a3b8;--err:#f87171;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+     background:var(--bg);color:var(--txt);min-height:100vh;
+     display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:var(--card);border-radius:16px;padding:32px;max-width:520px;
+      width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+h1{font-size:1.3rem;margin-bottom:4px}
+.sub{color:var(--mut);font-size:.9rem;margin-bottom:24px}
+label{display:block;font-size:.85rem;color:var(--mut);margin:16px 0 6px}
+input[type=date]{width:100%;padding:10px;border-radius:8px;border:1px solid #334155;
+     background:#0f172a;color:var(--txt);font-size:1rem}
+.drop{border:2px dashed #334155;border-radius:12px;padding:28px;text-align:center;
+     cursor:pointer;transition:border-color .2s, background .2s;margin-top:6px}
+.drop:hover,.drop.over{border-color:var(--accent);background:rgba(16,185,129,.06)}
+.drop.has{border-color:var(--accent2);background:rgba(16,185,129,.08)}
+.drop .fname{font-weight:600;color:var(--accent2);margin-top:8px;word-break:break-all}
+input[type=file]{display:none}
+button{width:100%;margin-top:24px;padding:14px;border:none;border-radius:10px;
+     background:var(--accent);color:#04150e;font-size:1rem;font-weight:700;
+     cursor:pointer;transition:background .2s}
+button:hover{background:var(--accent2)}
+button:disabled{background:#334155;color:var(--mut);cursor:not-allowed}
+.status{margin-top:20px;font-size:.9rem;color:var(--mut);min-height:1.4em}
+.status.err{color:var(--err)}
+.result{margin-top:16px;display:none}
+.result a{display:block;padding:12px 14px;background:#0f172a;border:1px solid #334155;
+     border-radius:10px;color:var(--accent2);text-decoration:none;margin-top:8px;
+     font-size:.9rem}
+.result a:hover{border-color:var(--accent)}
+.qa{margin-top:14px;font-size:.85rem;color:var(--mut);background:#0f172a;
+     border-radius:10px;padding:12px 14px;line-height:1.7}
+.hint{margin-top:18px;font-size:.78rem;color:var(--mut);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📋 Konverter Rekapitulasi Data Keluarga</h1>
+  <div class="sub">PDF ekspor pemerintah → 2 file Excel (replika + ringkasan KK)</div>
+
+  <form id="f" method="post" action="/api/convert" enctype="multipart/form-data">
+    <label>1. Pilih tanggal acuan (untuk hitung umur)</label>
+    <input type="date" name="acuan" id="acuan">
+
+    <label>2. Taruh / pilih file PDF</label>
+    <div class="drop" id="drop">
+      <div>Klik atau seret file PDF ke sini</div>
+      <div class="fname" id="fname"></div>
+    </div>
+    <input type="file" name="pdf" id="pdf" accept="application/pdf">
+
+    <button type="submit" id="go" disabled>Konversi</button>
+  </form>
+
+  <div class="status" id="status"></div>
+  <div class="result" id="result">
+    <a id="lconv" href="#">⬇️ File hasil konversi (replika konverter berbayar)</a>
+    <a id="lsumm" href="#">⬇️ Ringkasan per Kepala Keluarga (≥ 18 tahun)</a>
+    <div class="qa" id="qa"></div>
+  </div>
+  <div class="hint">
+    Baris <b style="color:#86efac">hijau</b> = Kepala Keluarga, baris putih di
+    bawahnya = anggota keluarga. Umur dihitung dari TANGGAL LAHIR (teks dd-mm-yyyy)
+    pada tanggal acuan; anggota berumur ≥ 18 tahun dihitung ke kolom
+    "Jumlah Anggota Keluarga".
+  </div>
+</div>
+<script>
+const drop=document.getElementById('drop'),pdf=document.getElementById('pdf'),
+      fname=document.getElementById('fname'),go=document.getElementById('go'),
+      acuan=document.getElementById('acuan'),status=document.getElementById('status'),
+      form=document.getElementById('f');
+acuan.value=new Date().toISOString().slice(0,10);
+drop.onclick=()=>pdf.click();
+drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};
+drop.ondragleave=()=>drop.classList.remove('over');
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');
+  if(e.dataTransfer.files[0]){pdf.files=e.dataTransfer.files;show()}};
+pdf.onchange=show;
+function show(){
+  const f=pdf.files[0];
+  if(!f)return;
+  if(!f.name.toLowerCase().endsWith('.pdf')){status.textContent='Harus file PDF';status.className='status err';return}
+  fname.textContent=f.name;drop.classList.add('has');go.disabled=false;
+  status.textContent='';status.className='status';
+}
+form.onsubmit=async e=>{
+  e.preventDefault();
+  if(!pdf.files[0])return;
+  go.disabled=true;status.textContent='Mengonversi… (bisa butuh beberapa detik)';
+  document.getElementById('result').style.display='none';
+  const fd=new FormData(form);
+  try{
+    const r=await fetch('/api/convert',{method:'POST',body:fd});
+    const j=await r.json();
+    if(!j.ok){status.textContent=j.error;status.className='status err';go.disabled=false;return}
+    status.textContent='Selesai ✅';status.className='status';
+    const res=document.getElementById('result');res.style.display='block';
+    document.getElementById('lconv').href='/api/dl?name='+encodeURIComponent(j.converted);
+    document.getElementById('lsumm').href='/api/dl?name='+encodeURIComponent(j.summary);
+    document.getElementById('qa').innerHTML=
+      'Keluarga: <b>'+j.families+'</b> · Anggota: <b>'+j.penduduk+'</b> · '+
+      'Dewasa ≥18: <b>'+j.dewasa+'</b>'+
+      (j.ringkasan? ' · RINGKASAN PDF: '+j.ringkasan+' KK':'')+
+      (j.warn? '<br><span style="color:#f87171">'+j.warn+'</span>':'');
+    go.disabled=false;
+  }catch(err){status.textContent='Gagal: '+err;status.className='status err';go.disabled=false}
+};
+</script>
+</body>
+</html>

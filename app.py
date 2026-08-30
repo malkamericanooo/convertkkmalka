@@ -190,8 +190,11 @@ def cast_row(row):
             out[idx] = int(out[idx])
     return out[:25]
 
-def build_converted(doc, out_path):
-    wb = openpyxl.Workbook(); ws = wb.active; ws.title = 'Sheet1'
+def build_converted(doc, out):
+    """Build converted xlsx. out can be a path string or file-like object (BytesIO)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Sheet1'
     for c, w in COL_WIDTHS.items(): ws.column_dimensions[c].width = w
     r0 = 1
     families = []   # untuk summary
@@ -260,7 +263,7 @@ def build_converted(doc, out_path):
             for j, v in enumerate(prow[:4]):
                 ws.cell(row=r0, column=9+j, value=v).font = F_DATA
             r0 += 1
-    wb.save(out_path)
+    wb.save(out)
     return families
 
 # ---------- tanggal / umur ----------
@@ -278,7 +281,8 @@ def parse_tanggal(s):
 def umur_pada(lahir, acuan):
     return acuan.year - lahir.year - ((acuan.month, acuan.day) < (lahir.month, lahir.day))
 
-def build_summary(families, doc, acuan, out_path, threshold=18):
+def build_summary(families, doc, acuan, out, threshold=18):
+    """Build summary xlsx. out can be a path string or file-like object (BytesIO)."""
     info = doc['info']
     def ttl(x):
         return ' '.join(w[0].upper() + w[1:].lower() if w else w for w in (x or '').split())
@@ -329,7 +333,7 @@ def build_summary(families, doc, acuan, out_path, threshold=18):
             cell.font = F_DATA; cell.border = BOX
     ws['C8'] = f': {n}  KK'
     ws['C9'] = f': {qa["total_penduduk"]}'
-    wb.save(out_path)
+    wb.save(out)
     return qa
 
 def convert(pdf_path, acuan, outdir):

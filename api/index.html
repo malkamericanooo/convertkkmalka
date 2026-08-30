@@ -104,8 +104,18 @@ form.onsubmit=async e=>{
     if(!j.ok){status.textContent=j.error;status.className='status err';go.disabled=false;return}
     status.textContent='Selesai ✅';status.className='status';
     const res=document.getElementById('result');res.style.display='block';
-    document.getElementById('lconv').href='/api/dl?name='+encodeURIComponent(j.converted);
-    document.getElementById('lsumm').href='/api/dl?name='+encodeURIComponent(j.summary);
+    // Decode base64 and create download blobs
+    function b64toBlob(b64,type){
+      const bin=atob(b64),len=bin.length,bytes=new Uint8Array(len);
+      for(let i=0;i<len;i++)bytes[i]=bin.charCodeAt(i);
+      return new Blob([bytes],{type:type});
+    }
+    const convBlob=b64toBlob(j.converted_data,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const summBlob=b64toBlob(j.summary_data,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    document.getElementById('lconv').href=URL.createObjectURL(convBlob);
+    document.getElementById('lconv').download=j.converted_name;
+    document.getElementById('lsumm').href=URL.createObjectURL(summBlob);
+    document.getElementById('lsumm').download=j.summary_name;
     document.getElementById('qa').innerHTML=
       'Keluarga: <b>'+j.families+'</b> · Anggota: <b>'+j.penduduk+'</b> · '+
       'Dewasa ≥18: <b>'+j.dewasa+'</b>'+

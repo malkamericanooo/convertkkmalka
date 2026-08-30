@@ -5,124 +5,496 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Konverter Rekapitulasi KK</title>
 <style>
-:root{--bg:#0f172a;--card:#1e293b;--accent:#10b981;--accent2:#34d399;
-      --txt:#e2e8f0;--mut:#94a3b8;--err:#f87171;}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-     background:var(--bg);color:var(--txt);min-height:100vh;
-     display:flex;align-items:center;justify-content:center;padding:24px}
-.card{background:var(--card);border-radius:16px;padding:32px;max-width:520px;
-      width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4)}
-h1{font-size:1.3rem;margin-bottom:4px}
-.sub{color:var(--mut);font-size:.9rem;margin-bottom:24px}
-label{display:block;font-size:.85rem;color:var(--mut);margin:16px 0 6px}
-input[type=date]{width:100%;padding:10px;border-radius:8px;border:1px solid #334155;
-     background:#0f172a;color:var(--txt);font-size:1rem}
-.drop{border:2px dashed #334155;border-radius:12px;padding:28px;text-align:center;
-     cursor:pointer;transition:border-color .2s, background .2s;margin-top:6px}
-.drop:hover,.drop.over{border-color:var(--accent);background:rgba(16,185,129,.06)}
-.drop.has{border-color:var(--accent2);background:rgba(16,185,129,.08)}
-.drop .fname{font-weight:600;color:var(--accent2);margin-top:8px;word-break:break-all}
-input[type=file]{display:none}
-button{width:100%;margin-top:24px;padding:14px;border:none;border-radius:10px;
-     background:var(--accent);color:#04150e;font-size:1rem;font-weight:700;
-     cursor:pointer;transition:background .2s}
-button:hover{background:var(--accent2)}
-button:disabled{background:#334155;color:var(--mut);cursor:not-allowed}
-.status{margin-top:20px;font-size:.9rem;color:var(--mut);min-height:1.4em}
-.status.err{color:var(--err)}
-.result{margin-top:16px;display:none}
-.result a{display:block;padding:12px 14px;background:#0f172a;border:1px solid #334155;
-     border-radius:10px;color:var(--accent2);text-decoration:none;margin-top:8px;
-     font-size:.9rem}
-.result a:hover{border-color:var(--accent)}
-.qa{margin-top:14px;font-size:.85rem;color:var(--mut);background:#0f172a;
-     border-radius:10px;padding:12px 14px;line-height:1.7}
-.hint{margin-top:18px;font-size:.78rem;color:var(--mut);line-height:1.6}
+:root {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --surface: #334155;
+  --accent: #10b981;
+  --accent-hover: #059669;
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --error: #ef4444;
+  --radius: 8px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  line-height: 1.5;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 40px;
+  max-width: 560px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin-bottom: 32px;
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+.step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--surface);
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+input[type="date"] {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--surface);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9375rem;
+  transition: border-color 0.2s;
+}
+
+input[type="date"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.drop-zone {
+  border: 2px dashed var(--surface);
+  border-radius: var(--radius);
+  padding: 40px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg);
+}
+
+.drop-zone:hover,
+.drop-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.drop-zone.has-file {
+  border-color: var(--accent);
+  border-style: solid;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.drop-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+.drop-text {
+  font-size: 0.9375rem;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.drop-filename {
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 0.9375rem;
+  word-break: break-all;
+}
+
+input[type="file"] { display: none; }
+
+.btn {
+  width: 100%;
+  padding: 14px 24px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  margin-top: 8px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-export {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--surface);
+  padding: 12px 20px;
+  font-size: 0.9375rem;
+  text-decoration: none;
+  margin-bottom: 8px;
+}
+
+.btn-export:hover {
+  border-color: var(--accent);
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.status {
+  margin-top: 20px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  min-height: 0;
+  transition: all 0.2s;
+}
+
+.status:empty {
+  display: none;
+}
+
+.status.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.status.success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.status.loading {
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.result {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--surface);
+  display: none;
+}
+
+.result.visible {
+  display: block;
+}
+
+.export-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+.stats {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.stats-label {
+  color: var(--text-dim);
+}
+
+.stats-value {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stats-value.highlight {
+  color: var(--accent);
+}
+
+.warning {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius);
+  color: var(--error);
+  font-size: 0.875rem;
+}
+
+.hint {
+  margin-top: 24px;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.hint strong {
+  color: var(--accent);
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .card { padding: 24px; }
+  h1 { font-size: 1.25rem; }
+}
 </style>
 </head>
 <body>
 <div class="card">
-  <h1>📋 Konverter Rekapitulasi Data Keluarga</h1>
-  <div class="sub">PDF ekspor pemerintah → 2 file Excel (replika + ringkasan KK)</div>
+  <h1>Konverter Rekapitulasi Data Keluarga</h1>
+  <p class="subtitle">PDF ekspor pemerintah → 2 file Excel</p>
 
   <form id="f" method="post" action="/api/convert" enctype="multipart/form-data">
-    <label>1. Pilih tanggal acuan (untuk hitung umur)</label>
-    <input type="date" name="acuan" id="acuan">
-
-    <label>2. Taruh / pilih file PDF</label>
-    <div class="drop" id="drop">
-      <div>Klik atau seret file PDF ke sini</div>
-      <div class="fname" id="fname"></div>
+    <div class="section">
+      <label class="section-label">
+        <span class="step-num">1</span>
+        Tanggal Acuan
+      </label>
+      <input type="date" name="acuan" id="acuan">
     </div>
-    <input type="file" name="pdf" id="pdf" accept="application/pdf">
 
-    <button type="submit" id="go" disabled>Konversi</button>
+    <div class="section">
+      <label class="section-label">
+        <span class="step-num">2</span>
+        File PDF
+      </label>
+      <div class="drop-zone" id="drop">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">Klik atau seret file PDF ke sini</div>
+        <div class="drop-filename" id="fname"></div>
+      </div>
+      <input type="file" name="pdf" id="pdf" accept="application/pdf">
+    </div>
+
+    <button type="submit" id="go" class="btn btn-primary" disabled>
+      <span id="btn-text">Konversi PDF</span>
+    </button>
   </form>
 
   <div class="status" id="status"></div>
+
   <div class="result" id="result">
-    <a id="lconv" href="#">⬇️ File hasil konversi (replika konverter berbayar)</a>
-    <a id="lsumm" href="#">⬇️ Ringkasan per Kepala Keluarga (≥ 18 tahun)</a>
-    <div class="qa" id="qa"></div>
+    <div class="export-label">File yang sudah dikonversi:</div>
+    <a id="lconv" href="#" class="btn btn-export">
+      📊 REKAP Lengkap (Replika Konverter)
+    </a>
+    <a id="lsumm" href="#" class="btn btn-export">
+      📋 DESA Ringkasan KK (≥ 18 tahun)
+    </a>
+
+    <div class="stats" id="stats"></div>
+    <div class="warning" id="warn" style="display:none"></div>
   </div>
+
   <div class="hint">
-    Baris <b style="color:#86efac">hijau</b> = Kepala Keluarga, baris putih di
-    bawahnya = anggota keluarga. Umur dihitung dari TANGGAL LAHIR (teks dd-mm-yyyy)
-    pada tanggal acuan; anggota berumur ≥ 18 tahun dihitung ke kolom
-    "Jumlah Anggota Keluarga".
+    <strong>Format:</strong> Baris <strong>hijau</strong> = Kepala Keluarga, baris putih = anggota keluarga.
+    Umur dihitung dari TANGGAL LAHIR (dd-mm-yyyy) pada tanggal acuan.
+    Anggota ≥ 18 tahun dihitung ke kolom "Jumlah Anggota Keluarga".
   </div>
 </div>
+
 <script>
-const drop=document.getElementById('drop'),pdf=document.getElementById('pdf'),
-      fname=document.getElementById('fname'),go=document.getElementById('go'),
-      acuan=document.getElementById('acuan'),status=document.getElementById('status'),
-      form=document.getElementById('f');
-acuan.value=new Date().toISOString().slice(0,10);
-drop.onclick=()=>pdf.click();
-drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};
-drop.ondragleave=()=>drop.classList.remove('over');
-drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');
-  if(e.dataTransfer.files[0]){pdf.files=e.dataTransfer.files;show()}};
-pdf.onchange=show;
-function show(){
-  const f=pdf.files[0];
-  if(!f)return;
-  if(!f.name.toLowerCase().endsWith('.pdf')){status.textContent='Harus file PDF';status.className='status err';return}
-  fname.textContent=f.name;drop.classList.add('has');go.disabled=false;
-  status.textContent='';status.className='status';
-}
-form.onsubmit=async e=>{
+const drop = document.getElementById('drop');
+const pdf = document.getElementById('pdf');
+const fname = document.getElementById('fname');
+const go = document.getElementById('go');
+const btnText = document.getElementById('btn-text');
+const acuan = document.getElementById('acuan');
+const status = document.getElementById('status');
+const form = document.getElementById('f');
+const result = document.getElementById('result');
+
+acuan.value = new Date().toISOString().slice(0, 10);
+
+drop.onclick = () => pdf.click();
+
+drop.ondragover = e => {
   e.preventDefault();
-  if(!pdf.files[0])return;
-  go.disabled=true;status.textContent='Mengonversi… (bisa butuh beberapa detik)';
-  document.getElementById('result').style.display='none';
-  const fd=new FormData(form);
-  try{
-    const r=await fetch('/api/convert',{method:'POST',body:fd});
-    const j=await r.json();
-    if(!j.ok){status.textContent=j.error;status.className='status err';go.disabled=false;return}
-    status.textContent='Selesai ✅';status.className='status';
-    const res=document.getElementById('result');res.style.display='block';
-    // Decode base64 and create download blobs
-    function b64toBlob(b64,type){
-      const bin=atob(b64),len=bin.length,bytes=new Uint8Array(len);
-      for(let i=0;i<len;i++)bytes[i]=bin.charCodeAt(i);
-      return new Blob([bytes],{type:type});
+  drop.classList.add('dragover');
+};
+
+drop.ondragleave = () => {
+  drop.classList.remove('dragover');
+};
+
+drop.ondrop = e => {
+  e.preventDefault();
+  drop.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) {
+    pdf.files = e.dataTransfer.files;
+    show();
+  }
+};
+
+pdf.onchange = show;
+
+function show() {
+  const f = pdf.files[0];
+  if (!f) return;
+
+  if (!f.name.toLowerCase().endsWith('.pdf')) {
+    status.textContent = '⚠️ Harus file PDF';
+    status.className = 'status error';
+    return;
+  }
+
+  fname.textContent = f.name;
+  drop.classList.add('has-file');
+  go.disabled = false;
+  status.textContent = '';
+  status.className = 'status';
+}
+
+form.onsubmit = async e => {
+  e.preventDefault();
+  if (!pdf.files[0]) return;
+
+  go.disabled = true;
+  btnText.innerHTML = '<span class="spinner"></span> Mengonversi...';
+  status.textContent = 'Sedang memproses PDF, mohon tunggu...';
+  status.className = 'status loading';
+  result.classList.remove('visible');
+
+  const fd = new FormData(form);
+
+  try {
+    const r = await fetch('/api/convert', { method: 'POST', body: fd });
+    const j = await r.json();
+
+    if (!j.ok) {
+      status.textContent = '⚠️ ' + j.error;
+      status.className = 'status error';
+      go.disabled = false;
+      btnText.textContent = 'Konversi PDF';
+      return;
     }
-    const convBlob=b64toBlob(j.converted_data,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    const summBlob=b64toBlob(j.summary_data,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    document.getElementById('lconv').href=URL.createObjectURL(convBlob);
-    document.getElementById('lconv').download=j.converted_name;
-    document.getElementById('lsumm').href=URL.createObjectURL(summBlob);
-    document.getElementById('lsumm').download=j.summary_name;
-    document.getElementById('qa').innerHTML=
-      'Keluarga: <b>'+j.families+'</b> · Anggota: <b>'+j.penduduk+'</b> · '+
-      'Dewasa ≥18: <b>'+j.dewasa+'</b>'+
-      (j.ringkasan? ' · RINGKASAN PDF: '+j.ringkasan+' KK':'')+
-      (j.warn? '<br><span style="color:#f87171">'+j.warn+'</span>':'');
-    go.disabled=false;
-  }catch(err){status.textContent='Gagal: '+err;status.className='status err';go.disabled=false}
+
+    status.textContent = '✅ Konversi berhasil!';
+    status.className = 'status success';
+    btnText.textContent = 'Konversi PDF';
+    result.classList.add('visible');
+
+    // Decode base64 and create download blobs
+    function b64toBlob(b64, type) {
+      const bin = atob(b64), len = bin.length, bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+      return new Blob([bytes], { type: type });
+    }
+
+    const convBlob = b64toBlob(j.converted_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const summBlob = b64toBlob(j.summary_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+    document.getElementById('lconv').href = URL.createObjectURL(convBlob);
+    document.getElementById('lconv').download = j.converted_name;
+    document.getElementById('lsumm').href = URL.createObjectURL(summBlob);
+    document.getElementById('lsumm').download = j.summary_name;
+
+    // Stats
+    const stats = document.getElementById('stats');
+    stats.innerHTML = `
+      <div class="stats-row">
+        <span class="stats-label">Keluarga</span>
+        <span class="stats-value highlight">${j.families}</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Total Anggota</span>
+        <span class="stats-value">${j.penduduk}</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Dewasa ≥ 18</span>
+        <span class="stats-value">${j.dewasa}</span>
+      </div>
+      ${j.ringkasan ? `
+      <div class="stats-row">
+        <span class="stats-label">RINGKASAN PDF</span>
+        <span class="stats-value">${j.ringkasan} KK</span>
+      </div>` : ''}
+    `;
+
+    const warn = document.getElementById('warn');
+    if (j.warn) {
+      warn.textContent = '⚠️ ' + j.warn;
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+    }
+
+    go.disabled = false;
+
+  } catch (err) {
+    status.textContent = '⚠️ Gagal: ' + err;
+    status.className = 'status error';
+    go.disabled = false;
+    btnText.textContent = 'Konversi PDF';
+  }
 };
 </script>
 </body>

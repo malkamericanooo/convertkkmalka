@@ -85,6 +85,7 @@ class handler(BaseHTTPRequestHandler):
             if not data.startswith(b'%PDF'):
                 raise ValueError('File bukan PDF yang valid.')
             acuan = datetime.date.fromisoformat(acuan_str) if acuan_str else datetime.date.today()
+            kategori = converter.parse_kategori(fields.get('kategori'))
 
             # Parse PDF from bytes
             doc = converter.parse_pdf(io.BytesIO(data))
@@ -97,21 +98,25 @@ class handler(BaseHTTPRequestHandler):
             summ_buf = io.BytesIO()
             qa = converter.build_summary(families, doc, acuan, summ_buf)
 
-            # Build semua-anggota xlsx (>= 18 dan < 18) in memory
-            semua_buf = io.BytesIO()
-            converter.build_semua_anggota(families, doc, acuan, semua_buf)
-
             # Encode as base64 for JSON response
             conv_b64 = base64.b64encode(conv_buf.getvalue()).decode('utf-8')
             summ_b64 = base64.b64encode(summ_buf.getvalue()).decode('utf-8')
-            semua_b64 = base64.b64encode(semua_buf.getvalue()).decode('utf-8')
 
             # Generate filenames
             desa = (doc['info'].get('desa') or 'DESA').replace("'", '').replace(' ', '_')
             rt = (doc['info'].get('rt') or '').replace(' ', '')
             conv_name = f'REKAP {desa} {rt} converted.xlsx'
             summ_name = f'DESA {desa}.xlsx'
-            semua_name = f'DESA {desa} SEMUA ANGGOTA.xlsx'
+
+            # Kategori umur terpilih: gabungan (kalau > 1) + satu file per kategori
+            kat_files, kat_tot = [], []
+            for nama, label, keys in converter.rencana_file_kategori(desa, kategori):
+                buf = io.BytesIO()
+                tot = converter.build_per_kategori(families, doc, acuan, buf, keys)
+                kat_files.append({'name': nama, 'label': label,
+                                  'data': base64.b64encode(buf.getvalue()).decode('utf-8')})
+                if len(keys) == 1:
+                    kat_tot.append({'label': label, 'jumlah': tot[keys[0]]})
 
             # Warnings
             warn = []
@@ -134,8 +139,8 @@ class handler(BaseHTTPRequestHandler):
                 'converted_data': conv_b64,
                 'summary_name': summ_name,
                 'summary_data': summ_b64,
-                'semua_name': semua_name,
-                'semua_data': semua_b64,
+                'kategori_files': kat_files,
+                'kategori_tot': kat_tot,
             })
         except Exception as e:
             self._send_json(400, {'ok': False, 'error': str(e)})

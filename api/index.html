@@ -138,6 +138,50 @@ input[type="date"]:focus {
 
 input[type="file"] { display: none; }
 
+.kat-list {
+  display: grid;
+  gap: 8px;
+}
+
+.kat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--surface);
+  border-radius: var(--radius);
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 0.9375rem;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.kat:hover { border-color: var(--accent); }
+
+.kat:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.kat input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.kat small {
+  display: block;
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+}
+
+.field-hint {
+  margin-top: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+}
+
 .btn {
   width: 100%;
   padding: 14px 24px;
@@ -310,7 +354,7 @@ input[type="file"] { display: none; }
 <body>
 <div class="card">
   <h1>Konverter Rekapitulasi Data Keluarga</h1>
-  <p class="subtitle">PDF ekspor pemerintah → 3 file Excel</p>
+  <p class="subtitle">PDF ekspor pemerintah → Excel (2 file utama + kategori umur pilihan)</p>
 
   <form id="f" method="post" action="/api/convert" enctype="multipart/form-data">
     <div class="section">
@@ -324,6 +368,21 @@ input[type="file"] { display: none; }
     <div class="section">
       <label class="section-label">
         <span class="step-num">2</span>
+        Kategori Umur (bisa pilih lebih dari satu)
+      </label>
+      <div class="kat-list" id="kat-list">
+        <label class="kat"><input type="checkbox" id="kat-balita" value="balita"><span>Bayi Balita<small>0–59 bulan</small></span></label>
+        <label class="kat"><input type="checkbox" id="kat-prasekolah" value="prasekolah"><span>Anak Pra Sekolah<small>5–6 tahun</small></span></label>
+        <label class="kat"><input type="checkbox" id="kat-sekolah" value="sekolah"><span>Anak Usia Sekolah &amp; Remaja<small>7 tahun – 17 tahun 11 bulan 29 hari</small></span></label>
+        <label class="kat"><input type="checkbox" id="kat-dewasa" value="dewasa"><span>Dewasa / Produktif<small>18–59 tahun</small></span></label>
+        <label class="kat"><input type="checkbox" id="kat-lansia" value="lansia"><span>Lansia<small>60 tahun ke atas</small></span></label>
+      </div>
+      <div class="field-hint">Pilih lebih dari satu → dapat 1 file gabungan + file terpisah per kategori. Tidak pilih = hanya 2 file utama.</div>
+    </div>
+
+    <div class="section">
+      <label class="section-label">
+        <span class="step-num">3</span>
         File PDF
       </label>
       <div class="drop-zone" id="drop">
@@ -349,9 +408,7 @@ input[type="file"] { display: none; }
     <a id="lsumm" href="#" class="btn btn-export">
       📋 DESA Ringkasan KK (≥ 18 tahun)
     </a>
-    <a id="lsemua" href="#" class="btn btn-export">
-      👨‍👩‍👧 DESA Semua Anggota (≥ 18 &amp; &lt; 18 tahun)
-    </a>
+    <div id="lkat"></div>
 
     <div class="stats" id="stats"></div>
     <div class="warning" id="warn" style="display:none"></div>
@@ -361,7 +418,7 @@ input[type="file"] { display: none; }
     <strong>Format:</strong> Baris <strong>hijau</strong> = Kepala Keluarga, baris putih = anggota keluarga.
     Umur dihitung dari TANGGAL LAHIR (dd-mm-yyyy) pada tanggal acuan.
     Anggota ≥ 18 tahun dihitung ke kolom "Jumlah Anggota Keluarga".
-    File "Semua Anggota" juga menghitung anggota &lt; 18 tahun, dengan jumlah KK di paling atas.
+    File kategori umur berisi jumlah KK di paling atas, lalu per KK jumlah anggota tiap kategori yang dipilih.
   </div>
 </div>
 
@@ -428,6 +485,7 @@ form.onsubmit = async e => {
   result.classList.remove('visible');
 
   const fd = new FormData(form);
+  fd.set('kategori', [...document.querySelectorAll('#kat-list input:checked')].map(c => c.value).join(','));
 
   try {
     const r = await fetch('/api/convert', { method: 'POST', body: fd });
@@ -455,14 +513,23 @@ form.onsubmit = async e => {
 
     const convBlob = b64toBlob(j.converted_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     const summBlob = b64toBlob(j.summary_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    const semuaBlob = b64toBlob(j.semua_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
     document.getElementById('lconv').href = URL.createObjectURL(convBlob);
     document.getElementById('lconv').download = j.converted_name;
     document.getElementById('lsumm').href = URL.createObjectURL(summBlob);
     document.getElementById('lsumm').download = j.summary_name;
-    document.getElementById('lsemua').href = URL.createObjectURL(semuaBlob);
-    document.getElementById('lsemua').download = j.semua_name;
+
+    // Kategori umur: gabungan (kalau > 1 dipilih) + satu file per kategori
+    const lkat = document.getElementById('lkat');
+    lkat.replaceChildren();
+    for (const f of j.kategori_files) {
+      const a = document.createElement('a');
+      a.className = 'btn btn-export';
+      a.href = URL.createObjectURL(b64toBlob(f.data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
+      a.download = f.name;
+      a.textContent = (f.label.startsWith('Gabungan') ? '🗂️ ' : '👨‍👩‍👧 ') + f.label;
+      lkat.appendChild(a);
+    }
 
     // Stats
     const stats = document.getElementById('stats');
@@ -483,6 +550,11 @@ form.onsubmit = async e => {
         <span class="stats-label">Anak &lt; 18</span>
         <span class="stats-value">${j.anak}</span>
       </div>
+      ${j.kategori_tot.map(k => `
+      <div class="stats-row">
+        <span class="stats-label">${k.label}</span>
+        <span class="stats-value">${k.jumlah}</span>
+      </div>`).join('')}
       ${j.ringkasan ? `
       <div class="stats-row">
         <span class="stats-label">RINGKASAN PDF</span>

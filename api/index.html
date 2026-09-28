@@ -488,8 +488,19 @@ form.onsubmit = async e => {
   fd.set('kategori', [...document.querySelectorAll('#kat-list input:checked')].map(c => c.value).join(','));
 
   try {
-    const r = await fetch('/api/convert', { method: 'POST', body: fd });
-    const j = await r.json();
+    let r, j;
+    try {
+      r = await fetch('/api/convert', { method: 'POST', body: fd });
+    } catch (e) {
+      throw new Error('Server tidak membalas. Biasanya karena PDF terlalu besar atau terlalu lama diproses. Coba lagi, atau pecah PDF per RT.');
+    }
+    try {
+      j = await r.json();
+    } catch (e) {
+      throw new Error(r.status === 413
+        ? 'File PDF terlalu besar untuk server (maksimal ±4,5 MB). Coba pecah PDF per RT.'
+        : 'Server error ' + r.status + ' (kemungkinan waktu proses habis). Coba lagi, atau pecah PDF per RT.');
+    }
 
     if (!j.ok) {
       status.textContent = '⚠️ ' + j.error;
@@ -573,7 +584,7 @@ form.onsubmit = async e => {
     go.disabled = false;
 
   } catch (err) {
-    status.textContent = '⚠️ Gagal: ' + err;
+    status.textContent = '⚠️ Gagal: ' + (err.message || err);
     status.className = 'status error';
     go.disabled = false;
     btnText.textContent = 'Konversi PDF';

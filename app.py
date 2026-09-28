@@ -138,21 +138,26 @@ def parse_pdf(pdf_path):
     doc = {'info': {}, 'pages': [], 'ringkasan': None, 'qa': []}
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
-            text = page.extract_text() or ''
-            is_summary = ('JUMLAH PELAYANAN' in text and 'MUTASI :' in text
-                          and 'KESERTAAN BER-KB' not in text)
-            if is_summary:
-                doc['ringkasan'] = parse_ringkasan(page)
-                continue
-            rows, greens, text = page_data(page)
-            rows = [[clean(v) for v in row[:25]] for row in rows]
-            # buang baris kosong SEKALIGUS geser index greens agar tetap cocok
-            kept, ng = [], set()
-            for idx, r in enumerate(rows):
-                if any(r):
-                    if idx in greens: ng.add(len(kept))
-                    kept.append(r)
-            doc['pages'].append({'rows': kept, 'greens': ng, 'header': parse_header(text)})
+            # close() buang cache objek halaman setelah dipakai. Tanpa ini RAM naik
+            # ~15 MB per halaman dan PDF satu desa bikin fungsi Vercel kehabisan memori.
+            try:
+                text = page.extract_text() or ''
+                is_summary = ('JUMLAH PELAYANAN' in text and 'MUTASI :' in text
+                              and 'KESERTAAN BER-KB' not in text)
+                if is_summary:
+                    doc['ringkasan'] = parse_ringkasan(page)
+                    continue
+                rows, greens, text = page_data(page)
+                rows = [[clean(v) for v in row[:25]] for row in rows]
+                # buang baris kosong SEKALIGUS geser index greens agar tetap cocok
+                kept, ng = [], set()
+                for idx, r in enumerate(rows):
+                    if any(r):
+                        if idx in greens: ng.add(len(kept))
+                        kept.append(r)
+                doc['pages'].append({'rows': kept, 'greens': ng, 'header': parse_header(text)})
+            finally:
+                page.close()
         for pg in doc['pages']:
             if pg['header'].get('desa'):
                 doc['info'] = pg['header']; break

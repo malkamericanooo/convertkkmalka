@@ -43,14 +43,18 @@ def main():
         print('5. QA panel:', qa)
         assert '119' in qa, 'family count 119 missing from QA panel'
 
-        # 6. download both files and validate
+        # 6. download all three files and validate
         with page.expect_download() as d1:
             page.click('#lconv')
         f1 = d1.value
         with page.expect_download() as d2:
             page.click('#lsumm')
         f2 = d2.value
-        print('6. downloads triggered:', f1.suggested_filename, '|', f2.suggested_filename)
+        with page.expect_download() as d3:
+            page.click('#lsemua')
+        f3 = d3.value
+        print('6. downloads triggered:', f1.suggested_filename, '|', f2.suggested_filename,
+              '|', f3.suggested_filename)
 
         page.screenshot(path=os.path.join(BASE, 'output', 'e2e_result.png'), full_page=True)
         browser.close()

@@ -97,15 +97,21 @@ class handler(BaseHTTPRequestHandler):
             summ_buf = io.BytesIO()
             qa = converter.build_summary(families, doc, acuan, summ_buf)
 
+            # Build semua-anggota xlsx (>= 18 dan < 18) in memory
+            semua_buf = io.BytesIO()
+            converter.build_semua_anggota(families, doc, acuan, semua_buf)
+
             # Encode as base64 for JSON response
             conv_b64 = base64.b64encode(conv_buf.getvalue()).decode('utf-8')
             summ_b64 = base64.b64encode(summ_buf.getvalue()).decode('utf-8')
+            semua_b64 = base64.b64encode(semua_buf.getvalue()).decode('utf-8')
 
             # Generate filenames
             desa = (doc['info'].get('desa') or 'DESA').replace("'", '').replace(' ', '_')
             rt = (doc['info'].get('rt') or '').replace(' ', '')
             conv_name = f'REKAP {desa} {rt} converted.xlsx'
             summ_name = f'DESA {desa}.xlsx'
+            semua_name = f'DESA {desa} SEMUA ANGGOTA.xlsx'
 
             # Warnings
             warn = []
@@ -121,12 +127,15 @@ class handler(BaseHTTPRequestHandler):
                 'families': len(families),
                 'penduduk': qa['total_penduduk'],
                 'dewasa': qa['total_dewasa'],
+                'anak': qa['total_anak'],
                 'ringkasan': ring,
                 'warn': ' · '.join(warn),
                 'converted_name': conv_name,
                 'converted_data': conv_b64,
                 'summary_name': summ_name,
                 'summary_data': summ_b64,
+                'semua_name': semua_name,
+                'semua_data': semua_b64,
             })
         except Exception as e:
             self._send_json(400, {'ok': False, 'error': str(e)})

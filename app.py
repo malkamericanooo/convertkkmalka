@@ -3,6 +3,7 @@
 Konverter PDF Rekapitulasi Data Keluarga (BKKBN) -> Excel
 1) Replika hasil konverter berbayar: header berulang per halaman + data + RINGKASAN
 2) Ringkasan per KK format "DATA RUMAH TANGGA/KK" (format DESA MABURAI)
+3) Semua anggota: jumlah KK di atas, per KK anggota >= 18, < 18 dan total
 """
 import re, datetime, os, sys, json
 import pdfplumber
@@ -281,11 +282,35 @@ def parse_tanggal(s):
 def umur_pada(lahir, acuan):
     return acuan.year - lahir.year - ((acuan.month, acuan.day) < (lahir.month, lahir.day))
 
+def hitung_anggota(fam, acuan, threshold=18):
+    """Satu keluarga -> jumlah anggota >= threshold (dewasa), < threshold (anak),
+    total anggota, plus baris yang tanggal lahirnya tak terbaca / umurnya aneh.
+    Anggota tanpa umur valid masuk total tapi tidak ke dewasa maupun anak."""
+    h = {'dewasa': 0, 'anak': 0, 'anggota': 0, 'tanpa_tanggal': [], 'umur_anomali': []}
+    for hub, lahir in fam['members']:
+        h['anggota'] += 1
+        b = parse_tanggal(lahir)
+        if b is None:
+            if lahir not in (None, ''):
+                h['tanpa_tanggal'].append([fam['nama'], lahir])
+            continue
+        u = umur_pada(b, acuan)
+        if u < 0 or u > 120:
+            h['umur_anomali'].append([fam['nama'], lahir, u]); continue
+        if u >= threshold: h['dewasa'] += 1
+        else: h['anak'] += 1
+    return h
+
+def ttl(x):
+    return ' '.join(w[0].upper() + w[1:].lower() if w else w for w in (x or '').split())
+
+def rt_pendek(info):
+    rt = (info.get('rt') or '').strip()
+    return re.sub(r'RT\s*0+', 'RT ', rt) if rt else ''
+
 def build_summary(families, doc, acuan, out, threshold=18):
     """Build summary xlsx. out can be a path string or file-like object (BytesIO)."""
     info = doc['info']
-    def ttl(x):
-        return ' '.join(w[0].upper() + w[1:].lower() if w else w for w in (x or '').split())
     desa = ttl(info.get('desa'))
     kec  = ttl(info.get('kecamatan'))
     kab  = ttl(info.get('kabupaten'))
@@ -309,32 +334,77 @@ def build_summary(families, doc, acuan, out, threshold=18):
         cell = ws.cell(row=13, column=j, value=h)
         cell.font = F_HDR; cell.border = BOX; cell.fill = GREEN_FILL
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    rt = (info.get('rt') or '').strip()
-    rt_short = re.sub(r'RT\s*0+', 'RT ', rt) if rt else ''
-    qa = {'tanpa_tanggal': [], 'umur_anomali': [], 'total_dewasa': 0, 'total_penduduk': 0}
+    rt_short = rt_pendek(info)
+    qa = {'tanpa_tanggal': [], 'umur_anomali': [], 'total_dewasa': 0, 'total_anak': 0,
+          'total_penduduk': 0}
     n = 0
     for fam in families:
         n += 1
-        dewasa = 0; anggota = 0
-        for hub, lahir in fam['members']:
-            anggota += 1
-            b = parse_tanggal(lahir)
-            if b is None:
-                if lahir not in (None, ''):
-                    qa['tanpa_tanggal'].append([fam['nama'], lahir])
-                continue
-            u = umur_pada(b, acuan)
-            if u < 0 or u > 120:
-                qa['umur_anomali'].append([fam['nama'], lahir, u]); continue
-            if u >= threshold: dewasa += 1
-        qa['total_dewasa'] += dewasa; qa['total_penduduk'] += anggota
-        for j, v in enumerate([n, fam['nama'], dewasa, rt_short, ''], start=1):
+        h = hitung_anggota(fam, acuan, threshold)
+        qa['tanpa_tanggal'] += h['tanpa_tanggal']; qa['umur_anomali'] += h['umur_anomali']
+        qa['total_dewasa'] += h['dewasa']; qa['total_anak'] += h['anak']
+        qa['total_penduduk'] += h['anggota']
+        for j, v in enumerate([n, fam['nama'], h['dewasa'], rt_short, ''], start=1):
             cell = ws.cell(row=13+n, column=j, value=v)
             cell.font = F_DATA; cell.border = BOX
     ws['C8'] = f': {n}  KK'
     ws['C9'] = f': {qa["total_penduduk"]}'
     wb.save(out)
     return qa
+
+def build_semua_anggota(families, doc, acuan, out, threshold=18):
+    """File ke-3: jumlah KK + total anggota di paling atas, lalu per KK jumlah
+    anggota >= threshold, < threshold dan total. out bisa path atau BytesIO."""
+    info = doc['info']
+    rt = rt_pendek(info)
+    rows, tot = [], {'dewasa': 0, 'anak': 0, 'anggota': 0}
+    for fam in families:
+        h = hitung_anggota(fam, acuan, threshold)
+        for k in tot: tot[k] += h[k]
+        lain = h['anggota'] - h['dewasa'] - h['anak']
+        ket = f'{lain} anggota tgl lahir kosong/tidak valid' if lain else ''
+        rows.append([fam['nama'], h['dewasa'], h['anak'], h['anggota'], rt, ket])
+
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = 'Sheet1'
+    for c, w in {'A':10,'B':42,'C':18,'D':18,'E':16,'F':12,'G':36}.items():
+        ws.column_dimensions[c].width = w
+    ws['A1'] = 'REKAP KEPALA KELUARGA DAN ANGGOTA KELUARGA'
+    lokasi = [f'Desa {ttl(info["desa"])}' if info.get('desa') else '', rt,
+              f'Kec. {ttl(info["kecamatan"])}' if info.get('kecamatan') else '',
+              f'Kab. {ttl(info["kabupaten"])}' if info.get('kabupaten') else '']
+    ws['A2'] = ', '.join(x for x in lokasi if x)
+    ws['A3'] = f'Umur dihitung per tanggal {acuan:%d-%m-%Y}'
+    ws['A1'].font = F_HDR; ws['A2'].font = F_DATA; ws['A3'].font = F_DATA
+
+    rekap = [('Jumlah KK (Kepala Keluarga)', len(families)),
+             (f'Jumlah Anggota Keluarga ≥ {threshold} Tahun', tot['dewasa']),
+             (f'Jumlah Anggota Keluarga < {threshold} Tahun', tot['anak']),
+             ('Jumlah Penduduk (semua anggota)', tot['anggota'])]
+    lain = tot['anggota'] - tot['dewasa'] - tot['anak']
+    if lain: rekap.append(('Tgl lahir kosong/tidak valid', lain))
+    r = 5
+    for lbl, v in rekap:
+        ws.cell(row=r, column=1, value=lbl).font = F_HDR
+        cell = ws.cell(row=r, column=3, value=v)
+        cell.font = F_HDR; cell.alignment = Alignment(horizontal='left')
+        r += 1
+
+    hdr = r + 1
+    headers = ['No. Urut', 'Nama KK', f'Jumlah Anggota Keluarga ≥ {threshold} Tahun',
+               f'Jumlah Anggota Keluarga < {threshold} Tahun', 'Total Anggota Keluarga',
+               'Alamat (RT)', 'Keterangan']
+    for j, h in enumerate(headers, start=1):
+        cell = ws.cell(row=hdr, column=j, value=h)
+        cell.font = F_HDR; cell.border = BOX; cell.fill = GREEN_FILL
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    ws.row_dimensions[hdr].height = 42
+    for n, row in enumerate(rows, start=1):
+        for j, v in enumerate([n] + row, start=1):
+            cell = ws.cell(row=hdr + n, column=j, value=v)
+            cell.font = F_DATA; cell.border = BOX
+    ws.freeze_panes = f'A{hdr + 1}'
+    wb.save(out)
+    return tot
 
 def convert(pdf_path, acuan, outdir):
     doc = parse_pdf(pdf_path)
@@ -343,10 +413,13 @@ def convert(pdf_path, acuan, outdir):
     os.makedirs(outdir, exist_ok=True)
     conv = os.path.join(outdir, f'REKAP {desa} {rt} converted.xlsx')
     summ = os.path.join(outdir, f'DESA {desa}.xlsx')
+    semua = os.path.join(outdir, f'DESA {desa} SEMUA ANGGOTA.xlsx')
     fams = build_converted(doc, conv)
     qa = build_summary(fams, doc, acuan, summ)
+    build_semua_anggota(fams, doc, acuan, semua)
     ring = (doc['ringkasan'] or {}).get('ringkasan', {}).get('jumlah_keluarga', [None])[0]
     return {'converted': os.path.basename(conv), 'summary': os.path.basename(summ),
+            'semua': os.path.basename(semua),
             'families': len(fams), 'ringkasan_keluarga': ring, 'qa': qa}
 
 def convert_bytes(pdf_bytes, acuan, outdir):

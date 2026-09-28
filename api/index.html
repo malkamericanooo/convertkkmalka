@@ -310,7 +310,7 @@ input[type="file"] { display: none; }
 <body>
 <div class="card">
   <h1>Konverter Rekapitulasi Data Keluarga</h1>
-  <p class="subtitle">PDF ekspor pemerintah → 2 file Excel</p>
+  <p class="subtitle">PDF ekspor pemerintah → 3 file Excel</p>
 
   <form id="f" method="post" action="/api/convert" enctype="multipart/form-data">
     <div class="section">
@@ -349,6 +349,9 @@ input[type="file"] { display: none; }
     <a id="lsumm" href="#" class="btn btn-export">
       📋 DESA Ringkasan KK (≥ 18 tahun)
     </a>
+    <a id="lsemua" href="#" class="btn btn-export">
+      👨‍👩‍👧 DESA Semua Anggota (≥ 18 &amp; &lt; 18 tahun)
+    </a>
 
     <div class="stats" id="stats"></div>
     <div class="warning" id="warn" style="display:none"></div>
@@ -358,6 +361,7 @@ input[type="file"] { display: none; }
     <strong>Format:</strong> Baris <strong>hijau</strong> = Kepala Keluarga, baris putih = anggota keluarga.
     Umur dihitung dari TANGGAL LAHIR (dd-mm-yyyy) pada tanggal acuan.
     Anggota ≥ 18 tahun dihitung ke kolom "Jumlah Anggota Keluarga".
+    File "Semua Anggota" juga menghitung anggota &lt; 18 tahun, dengan jumlah KK di paling atas.
   </div>
 </div>
 
@@ -451,11 +455,14 @@ form.onsubmit = async e => {
 
     const convBlob = b64toBlob(j.converted_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     const summBlob = b64toBlob(j.summary_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const semuaBlob = b64toBlob(j.semua_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
     document.getElementById('lconv').href = URL.createObjectURL(convBlob);
     document.getElementById('lconv').download = j.converted_name;
     document.getElementById('lsumm').href = URL.createObjectURL(summBlob);
     document.getElementById('lsumm').download = j.summary_name;
+    document.getElementById('lsemua').href = URL.createObjectURL(semuaBlob);
+    document.getElementById('lsemua').download = j.semua_name;
 
     // Stats
     const stats = document.getElementById('stats');
@@ -471,6 +478,10 @@ form.onsubmit = async e => {
       <div class="stats-row">
         <span class="stats-label">Dewasa ≥ 18</span>
         <span class="stats-value">${j.dewasa}</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Anak &lt; 18</span>
+        <span class="stats-value">${j.anak}</span>
       </div>
       ${j.ringkasan ? `
       <div class="stats-row">

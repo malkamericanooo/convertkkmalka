@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Web app lokal: PDF Rekapitulasi -> 2 file Excel.
+"""Web app lokal: PDF Rekapitulasi -> 3 file Excel.
 Jalankan:  python3 server.py   lalu buka  http://localhost:8787
 """
 import os, datetime, json
@@ -92,7 +92,7 @@ button:disabled{background:#334155;color:var(--mut);cursor:not-allowed}
 <body>
 <div class="card">
   <h1>📋 Konverter Rekapitulasi Data Keluarga</h1>
-  <div class="sub">PDF ekspor pemerintah → 2 file Excel (replika + ringkasan KK)</div>
+  <div class="sub">PDF ekspor pemerintah → 3 file Excel (replika + ringkasan KK + semua anggota)</div>
 
   <form id="f" method="post" action="/convert" enctype="multipart/form-data">
     <label>1. Pilih tanggal acuan (untuk hitung umur)</label>
@@ -112,13 +112,15 @@ button:disabled{background:#334155;color:var(--mut);cursor:not-allowed}
   <div class="result" id="result">
     <a id="lconv" href="#">⬇️ File hasil konversi (replika konverter berbayar)</a>
     <a id="lsumm" href="#">⬇️ Ringkasan per Kepala Keluarga (≥ 18 tahun)</a>
+    <a id="lsemua" href="#">⬇️ Semua Anggota Keluarga (≥ 18 &amp; &lt; 18 tahun)</a>
     <div class="qa" id="qa"></div>
   </div>
   <div class="hint">
     Baris <b style="color:#86efac">hijau</b> = Kepala Keluarga, baris putih di
     bawahnya = anggota keluarga. Umur dihitung dari TANGGAL LAHIR (teks dd-mm-yyyy)
     pada tanggal acuan; anggota berumur ≥ 18 tahun dihitung ke kolom
-    "Jumlah Anggota Keluarga".
+    "Jumlah Anggota Keluarga". File "Semua Anggota" juga menghitung
+    anggota &lt; 18 tahun, dengan jumlah KK di paling atas.
   </div>
 </div>
 <script>
@@ -154,9 +156,10 @@ form.onsubmit=async e=>{
     const res=document.getElementById('result');res.style.display='block';
     document.getElementById('lconv').href='/dl?name='+encodeURIComponent(j.converted);
     document.getElementById('lsumm').href='/dl?name='+encodeURIComponent(j.summary);
+    document.getElementById('lsemua').href='/dl?name='+encodeURIComponent(j.semua);
     document.getElementById('qa').innerHTML=
       'Keluarga: <b>'+j.families+'</b> · Anggota: <b>'+j.penduduk+'</b> · '+
-      'Dewasa ≥18: <b>'+j.dewasa+'</b>'+
+      'Dewasa ≥18: <b>'+j.dewasa+'</b> · Anak &lt;18: <b>'+j.anak+'</b>'+
       (j.ringkasan? ' · RINGKASAN PDF: '+j.ringkasan+' KK':'')+
       (j.warn? '<br><span style="color:#f87171">'+j.warn+'</span>':'');
     go.disabled=false;
@@ -234,8 +237,10 @@ class H(BaseHTTPRequestHandler):
                 warn.append(f"{len(qa['umur_anomali'])} umur anomali (<0 atau >120)")
             self._send(200, 'application/json', json.dumps({
                 'ok': True, 'converted': res['converted'], 'summary': res['summary'],
+                'semua': res['semua'],
                 'families': res['families'], 'penduduk': qa['total_penduduk'],
-                'dewasa': qa['total_dewasa'], 'ringkasan': res['ringkasan_keluarga'],
+                'dewasa': qa['total_dewasa'], 'anak': qa['total_anak'],
+                'ringkasan': res['ringkasan_keluarga'],
                 'warn': ' · '.join(warn),
             }).encode())
         except Exception as e:

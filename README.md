@@ -1,10 +1,10 @@
 # Konverter Rekapitulasi Data Keluarga
 
-PDF ekspor pemerintah (Rekapitulasi Data Keluarga / BKKBN) → **Excel** (2 file utama + file kategori umur pilihan), tanpa bayar konverter online.
+PDF ekspor pemerintah (Rekapitulasi Data Keluarga / BKKBN) → **Excel**, tanpa bayar konverter online. Di web, centang file mana saja yang dibutuhkan (default semua). Membaca PDF-nya tetap wajib dan itu yang makan waktu; yang berkurang adalah jumlah file dan ukuran unduhan.
 
 | File | Isi |
 |---|---|
-| `REKAP ... converted.xlsx` | Replika tabel PDF (seperti konverter berbayar) |
+| `REKAP ... converted.xlsx` | Replika tabel PDF (seperti konverter berbayar), file paling besar |
 | `DESA ....xlsx` | Form survey POPM Filariasis: per KK, jumlah anggota ≥ 18 tahun |
 | `DESA ... <KATEGORI>.xlsx` | Satu file per kategori umur yang dicentang di web. Paling atas: jumlah KK + total kategori. Lalu per KK: jumlah di kategori, di luar kategori, total |
 | `DESA ... GABUNGAN <...>.xlsx` | Hanya kalau dicentang > 1 kategori: satu kolom per kategori + jumlah kategori terpilih |

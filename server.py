@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Web app lokal: PDF Rekapitulasi -> file Excel (2 utama + kategori umur pilihan).
+"""Web app lokal: PDF Rekapitulasi -> file Excel pilihan (REKAP, form POPM, kategori umur).
 Jalankan:  python3 server.py   lalu buka  http://localhost:8787
 """
 import os, datetime, json
@@ -94,13 +94,21 @@ button:disabled{background:#334155;color:var(--mut);cursor:not-allowed}
 <body>
 <div class="card">
   <h1>📋 Konverter Rekapitulasi Data Keluarga</h1>
-  <div class="sub">PDF ekspor pemerintah → Excel (replika + ringkasan KK + kategori umur pilihan)</div>
+  <div class="sub">PDF ekspor pemerintah → Excel, pilih file yang dibutuhkan saja</div>
 
   <form id="f" method="post" action="/convert" enctype="multipart/form-data">
     <label>1. Pilih tanggal acuan (untuk hitung umur)</label>
     <input type="date" name="acuan" id="acuan">
 
-    <label>2. Kategori umur (bisa pilih lebih dari satu → file gabungan + file terpisah)</label>
+    <label>2. File yang dibuat</label>
+    <div id="out-list">
+      <label class="kat"><input type="checkbox" id="out-rekap" value="rekap" checked> REKAP lengkap <small>salinan tabel PDF (file paling besar)</small></label>
+      <label class="kat"><input type="checkbox" id="out-popm" value="popm" checked> Form POPM: ringkasan KK <small>anggota ≥ 18 tahun</small></label>
+      <label class="kat"><input type="checkbox" id="out-terpisah" value="terpisah" checked> Per kategori umur: file terpisah</label>
+      <label class="kat"><input type="checkbox" id="out-gabungan" value="gabungan" checked> Per kategori umur: file gabungan</label>
+    </div>
+
+    <label>3. Kategori umur (untuk file per kategori, bisa lebih dari satu)</label>
     <div id="kat-list">
       <label class="kat"><input type="checkbox" id="kat-balita" value="balita"> Bayi Balita <small>0–59 bulan</small></label>
       <label class="kat"><input type="checkbox" id="kat-prasekolah" value="prasekolah"> Anak Pra Sekolah <small>5–6 tahun</small></label>
@@ -109,7 +117,7 @@ button:disabled{background:#334155;color:var(--mut);cursor:not-allowed}
       <label class="kat"><input type="checkbox" id="kat-lansia" value="lansia"> Lansia <small>60 tahun ke atas</small></label>
     </div>
 
-    <label>3. Taruh / pilih file PDF</label>
+    <label>4. Taruh / pilih file PDF</label>
     <div class="drop" id="drop">
       <div>Klik atau seret file PDF ke sini</div>
       <div class="fname" id="fname"></div>
@@ -121,9 +129,7 @@ button:disabled{background:#334155;color:var(--mut);cursor:not-allowed}
 
   <div class="status" id="status"></div>
   <div class="result" id="result">
-    <a id="lconv" href="#">⬇️ File hasil konversi (replika konverter berbayar)</a>
-    <a id="lsumm" href="#">⬇️ Ringkasan per Kepala Keluarga (≥ 18 tahun)</a>
-    <div id="lkat"></div>
+    <div id="lfiles"></div>
     <div class="qa" id="qa"></div>
   </div>
   <div class="hint">
@@ -156,21 +162,24 @@ function show(){
 form.onsubmit=async e=>{
   e.preventDefault();
   if(!pdf.files[0])return;
+  const pilih=l=>[...document.querySelectorAll(l+' input:checked')].map(c=>c.value);
+  const file=pilih('#out-list'),kategori=pilih('#kat-list');
+  if(!file.includes('rekap')&&!file.includes('popm')&&!(kategori.length&&(file.includes('terpisah')||file.includes('gabungan')))){
+    status.textContent='Belum ada file yang dipilih. Centang minimal satu file, atau pilih kategori umur untuk file per kategori.';
+    status.className='status err';return}
   go.disabled=true;status.textContent='Mengonversi… (bisa butuh beberapa detik)';
   document.getElementById('result').style.display='none';
   const fd=new FormData(form);
-  fd.set('kategori',[...document.querySelectorAll('#kat-list input:checked')].map(c=>c.value).join(','));
+  fd.set('file',file.join(','));fd.set('kategori',kategori.join(','));
   try{
     const r=await fetch('/convert',{method:'POST',body:fd});
     const j=await r.json();
     if(!j.ok){status.textContent=j.error;status.className='status err';go.disabled=false;return}
     status.textContent='Selesai ✅';status.className='status';
     const res=document.getElementById('result');res.style.display='block';
-    document.getElementById('lconv').href='/dl?name='+encodeURIComponent(j.converted);
-    document.getElementById('lsumm').href='/dl?name='+encodeURIComponent(j.summary);
-    const lkat=document.getElementById('lkat');lkat.replaceChildren();
-    for(const f of j.kategori_files){const a=document.createElement('a');
-      a.href='/dl?name='+encodeURIComponent(f.name);a.textContent='⬇️ '+f.label;lkat.appendChild(a)}
+    const lfiles=document.getElementById('lfiles');lfiles.replaceChildren();
+    for(const f of j.files){const a=document.createElement('a');
+      a.href='/dl?name='+encodeURIComponent(f.name);a.textContent='⬇️ '+f.label;lfiles.appendChild(a)}
     document.getElementById('qa').innerHTML=
       'Keluarga: <b>'+j.families+'</b> · Anggota: <b>'+j.penduduk+'</b> · '+
       'Dewasa ≥18: <b>'+j.dewasa+'</b> · Anak &lt;18: <b>'+j.anak+'</b>'+
@@ -244,7 +253,8 @@ class H(BaseHTTPRequestHandler):
                 raise ValueError('File bukan PDF yang valid.')
             acuan = datetime.date.fromisoformat(acuan_str) if acuan_str else datetime.date.today()
             kategori = conv.parse_kategori(fields.get('kategori'))
-            res = conv.convert_bytes(data, acuan, OUT, kategori)
+            pilihan = conv.parse_pilihan_file(fields.get('file'))
+            res = conv.convert_bytes(data, acuan, OUT, kategori, pilihan)
             warn = []
             qa = res['qa']
             if qa['tanpa_tanggal']:
@@ -252,8 +262,7 @@ class H(BaseHTTPRequestHandler):
             if qa['umur_anomali']:
                 warn.append(f"{len(qa['umur_anomali'])} umur anomali (<0 atau >120)")
             self._send(200, 'application/json', json.dumps({
-                'ok': True, 'converted': res['converted'], 'summary': res['summary'],
-                'kategori_files': res['kategori_files'], 'kategori_tot': res['kategori_tot'],
+                'ok': True, 'files': res['files'], 'kategori_tot': res['kategori_tot'],
                 'families': res['families'], 'penduduk': qa['total_penduduk'],
                 'dewasa': qa['total_dewasa'], 'anak': qa['total_anak'],
                 'ringkasan': res['ringkasan_keluarga'],

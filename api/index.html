@@ -354,7 +354,7 @@ input[type="file"] { display: none; }
 <body>
 <div class="card">
   <h1>Konverter Rekapitulasi Data Keluarga</h1>
-  <p class="subtitle">PDF ekspor pemerintah → Excel (2 file utama + kategori umur pilihan)</p>
+  <p class="subtitle">PDF ekspor pemerintah → Excel, pilih file yang dibutuhkan saja</p>
 
   <form id="f" method="post" action="/api/convert" enctype="multipart/form-data">
     <div class="section">
@@ -368,7 +368,20 @@ input[type="file"] { display: none; }
     <div class="section">
       <label class="section-label">
         <span class="step-num">2</span>
-        Kategori Umur (bisa pilih lebih dari satu)
+        File yang Dibuat
+      </label>
+      <div class="kat-list" id="out-list">
+        <label class="kat"><input type="checkbox" id="out-rekap" value="rekap" checked><span>REKAP Lengkap<small>salinan tabel PDF ke Excel (file paling besar)</small></span></label>
+        <label class="kat"><input type="checkbox" id="out-popm" value="popm" checked><span>Form POPM: Ringkasan KK<small>per KK, jumlah anggota ≥ 18 tahun</small></span></label>
+        <label class="kat"><input type="checkbox" id="out-terpisah" value="terpisah" checked><span>Per Kategori Umur: File Terpisah<small>satu file untuk tiap kategori yang dicentang di bawah</small></span></label>
+        <label class="kat"><input type="checkbox" id="out-gabungan" value="gabungan" checked><span>Per Kategori Umur: File Gabungan<small>semua kategori yang dicentang dalam satu file</small></span></label>
+      </div>
+    </div>
+
+    <div class="section">
+      <label class="section-label">
+        <span class="step-num">3</span>
+        Kategori Umur (untuk file per kategori)
       </label>
       <div class="kat-list" id="kat-list">
         <label class="kat"><input type="checkbox" id="kat-balita" value="balita"><span>Bayi Balita<small>0–59 bulan</small></span></label>
@@ -377,12 +390,12 @@ input[type="file"] { display: none; }
         <label class="kat"><input type="checkbox" id="kat-dewasa" value="dewasa"><span>Dewasa / Produktif<small>18–59 tahun</small></span></label>
         <label class="kat"><input type="checkbox" id="kat-lansia" value="lansia"><span>Lansia<small>60 tahun ke atas</small></span></label>
       </div>
-      <div class="field-hint">Pilih lebih dari satu → dapat 1 file gabungan + file terpisah per kategori. Tidak pilih = hanya 2 file utama.</div>
+      <div class="field-hint">Bisa pilih lebih dari satu. Kalau cuma satu kategori, hasilnya satu file.</div>
     </div>
 
     <div class="section">
       <label class="section-label">
-        <span class="step-num">3</span>
+        <span class="step-num">4</span>
         File PDF
       </label>
       <div class="drop-zone" id="drop">
@@ -402,13 +415,7 @@ input[type="file"] { display: none; }
 
   <div class="result" id="result">
     <div class="export-label">File yang sudah dikonversi:</div>
-    <a id="lconv" href="#" class="btn btn-export">
-      📊 REKAP Lengkap (Replika Konverter)
-    </a>
-    <a id="lsumm" href="#" class="btn btn-export">
-      📋 DESA Ringkasan KK (≥ 18 tahun)
-    </a>
-    <div id="lkat"></div>
+    <div id="lfiles"></div>
 
     <div class="stats" id="stats"></div>
     <div class="warning" id="warn" style="display:none"></div>
@@ -474,9 +481,19 @@ function show() {
   status.className = 'status';
 }
 
+const dicentang = list => [...document.querySelectorAll(list + ' input:checked')].map(c => c.value);
+
 form.onsubmit = async e => {
   e.preventDefault();
   if (!pdf.files[0]) return;
+
+  const file = dicentang('#out-list'), kategori = dicentang('#kat-list');
+  const adaFileKategori = kategori.length > 0 && (file.includes('terpisah') || file.includes('gabungan'));
+  if (!file.includes('rekap') && !file.includes('popm') && !adaFileKategori) {
+    status.textContent = '⚠️ Belum ada file yang dipilih. Centang minimal satu file, atau pilih kategori umur untuk file per kategori.';
+    status.className = 'status error';
+    return;
+  }
 
   go.disabled = true;
   btnText.innerHTML = '<span class="spinner"></span> Mengonversi...';
@@ -485,7 +502,8 @@ form.onsubmit = async e => {
   result.classList.remove('visible');
 
   const fd = new FormData(form);
-  fd.set('kategori', [...document.querySelectorAll('#kat-list input:checked')].map(c => c.value).join(','));
+  fd.set('file', file.join(','));
+  fd.set('kategori', kategori.join(','));
 
   try {
     let r, j;
@@ -522,24 +540,17 @@ form.onsubmit = async e => {
       return new Blob([bytes], { type: type });
     }
 
-    const convBlob = b64toBlob(j.converted_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    const summBlob = b64toBlob(j.summary_data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-
-    document.getElementById('lconv').href = URL.createObjectURL(convBlob);
-    document.getElementById('lconv').download = j.converted_name;
-    document.getElementById('lsumm').href = URL.createObjectURL(summBlob);
-    document.getElementById('lsumm').download = j.summary_name;
-
-    // Kategori umur: gabungan (kalau > 1 dipilih) + satu file per kategori
-    const lkat = document.getElementById('lkat');
-    lkat.replaceChildren();
-    for (const f of j.kategori_files) {
+    // Satu tombol download per file yang dipilih
+    const ikon = { rekap: '📊', popm: '📋', gabungan: '🗂️', kategori: '👨‍👩‍👧' };
+    const lfiles = document.getElementById('lfiles');
+    lfiles.replaceChildren();
+    for (const f of j.files) {
       const a = document.createElement('a');
       a.className = 'btn btn-export';
       a.href = URL.createObjectURL(b64toBlob(f.data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
       a.download = f.name;
-      a.textContent = (f.label.startsWith('Gabungan') ? '🗂️ ' : '👨‍👩‍👧 ') + f.label;
-      lkat.appendChild(a);
+      a.textContent = ikon[f.jenis] + ' ' + f.label;
+      lfiles.appendChild(a);
     }
 
     // Stats

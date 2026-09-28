@@ -86,37 +86,11 @@ class handler(BaseHTTPRequestHandler):
                 raise ValueError('File bukan PDF yang valid.')
             acuan = datetime.date.fromisoformat(acuan_str) if acuan_str else datetime.date.today()
             kategori = converter.parse_kategori(fields.get('kategori'))
+            pilihan = converter.parse_pilihan_file(fields.get('file'))
 
-            # Parse PDF from bytes
-            doc = converter.parse_pdf(io.BytesIO(data))
-
-            # Build converted xlsx in memory
-            conv_buf = io.BytesIO()
-            families = converter.build_converted(doc, conv_buf)
-
-            # Build summary xlsx in memory
-            summ_buf = io.BytesIO()
-            qa = converter.build_summary(families, doc, acuan, summ_buf)
-
-            # Encode as base64 for JSON response
-            conv_b64 = base64.b64encode(conv_buf.getvalue()).decode('utf-8')
-            summ_b64 = base64.b64encode(summ_buf.getvalue()).decode('utf-8')
-
-            # Generate filenames
-            desa = (doc['info'].get('desa') or 'DESA').replace("'", '').replace(' ', '_')
-            rt = (doc['info'].get('rt') or '').replace(' ', '')
-            conv_name = f'REKAP {desa} {rt} converted.xlsx'
-            summ_name = f'DESA {desa}.xlsx'
-
-            # Kategori umur terpilih: gabungan (kalau > 1) + satu file per kategori
-            kat_files, kat_tot = [], []
-            for nama, label, keys in converter.rencana_file_kategori(desa, kategori):
-                buf = io.BytesIO()
-                tot = converter.build_per_kategori(families, doc, acuan, buf, keys)
-                kat_files.append({'name': nama, 'label': label,
-                                  'data': base64.b64encode(buf.getvalue()).decode('utf-8')})
-                if len(keys) == 1:
-                    kat_tot.append({'label': label, 'jumlah': tot[keys[0]]})
+            # Parse PDF + build only the chosen xlsx files, all in memory
+            res = converter.konversi(io.BytesIO(data), acuan, kategori, pilihan)
+            qa = res['qa']
 
             # Warnings
             warn = []
@@ -125,22 +99,18 @@ class handler(BaseHTTPRequestHandler):
             if qa['umur_anomali']:
                 warn.append(f"{len(qa['umur_anomali'])} umur anomali (<0 atau >120)")
 
-            ring = (doc['ringkasan'] or {}).get('ringkasan', {}).get('jumlah_keluarga', [None])[0]
-
             self._send_json(200, {
                 'ok': True,
-                'families': len(families),
+                'families': res['families'],
                 'penduduk': qa['total_penduduk'],
                 'dewasa': qa['total_dewasa'],
                 'anak': qa['total_anak'],
-                'ringkasan': ring,
+                'ringkasan': res['ringkasan_keluarga'],
                 'warn': ' · '.join(warn),
-                'converted_name': conv_name,
-                'converted_data': conv_b64,
-                'summary_name': summ_name,
-                'summary_data': summ_b64,
-                'kategori_files': kat_files,
-                'kategori_tot': kat_tot,
+                # base64 so the page can offer each file as a download blob
+                'files': [dict(f, data=base64.b64encode(f['data']).decode('utf-8'))
+                          for f in res['files']],
+                'kategori_tot': res['kategori_tot'],
             })
         except Exception as e:
             self._send_json(400, {'ok': False, 'error': str(e)})

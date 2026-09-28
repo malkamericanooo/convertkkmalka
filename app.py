@@ -7,7 +7,7 @@ Konverter PDF Rekapitulasi Data Keluarga (BKKBN) -> Excel
    lansia): jumlah KK di atas, per KK jumlah anggota tiap kategori. Pilih lebih
    dari satu = file gabungan + file terpisah per kategori
 """
-import re, datetime, os, sys, json
+import re, datetime, os, sys, json, io
 import pdfplumber
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
@@ -199,6 +199,21 @@ def cast_row(row):
             out[idx] = int(out[idx])
     return out[:25]
 
+def kumpulkan_keluarga(doc):
+    """Baris hijau (atau hubungan KK) = kepala keluarga baru; baris sesudahnya =
+    anggotanya, sampai KK berikutnya, juga lintas halaman."""
+    families, cur = [], None
+    for pg in doc['pages']:
+        for i, row in enumerate(pg['rows']):
+            vals = cast_row(row)
+            if i in pg['greens'] or str(vals[4] or '').strip().upper() == 'KK':
+                cur = {'nama': vals[3], 'lahir': vals[5], 'kk_no': vals[0],
+                       'members': [(vals[4], vals[5])]}
+                families.append(cur)
+            elif cur is not None:
+                cur['members'].append((vals[4], vals[5]))
+    return families
+
 def build_converted(doc, out):
     """Build converted xlsx. out can be a path string or file-like object (BytesIO)."""
     wb = openpyxl.Workbook()
@@ -206,8 +221,7 @@ def build_converted(doc, out):
     ws.title = 'Sheet1'
     for c, w in COL_WIDTHS.items(): ws.column_dimensions[c].width = w
     r0 = 1
-    families = []   # untuk summary
-    cur = None
+    ada_kk = False
     for pg in doc['pages']:
         write_header_block(ws, r0, pg['header'] if pg['header'].get('desa') else doc['info'])
         data0 = r0 + 18
@@ -219,13 +233,9 @@ def build_converted(doc, out):
             is_green = i in pg['greens']
             hub = str(vals[4] or '').strip().upper()
             if is_green or hub == 'KK':
-                if cur: families.append(cur)
+                ada_kk = True
                 kk_full = vals[1] or kk_full
                 kk_no = vals[0] or kk_no
-                cur = {'nama': vals[3], 'lahir': vals[5], 'kk_no': vals[0],
-                       'members': [(vals[4], vals[5])]}
-            elif cur is not None:
-                cur['members'].append((vals[4], vals[5]))
             # tulis sel
             for j, v in enumerate(vals, start=1):
                 cell = ws.cell(row=rr, column=j)
@@ -235,11 +245,10 @@ def build_converted(doc, out):
             if is_green:
                 ws.cell(row=rr, column=1).value = kk_no
                 ws.cell(row=rr, column=2).value = kki_out(kk_full)
-            elif cur is not None:
+            elif ada_kk:
                 ws.cell(row=rr, column=1).value = None
                 ws.cell(row=rr, column=2).value = kki_out(kk_full)
         r0 = data0 + len(pg['rows'])
-    if cur: families.append(cur)
     # RINGKASAN
     if doc['ringkasan']:
         rk = doc['ringkasan']['ringkasan']
@@ -273,7 +282,6 @@ def build_converted(doc, out):
                 ws.cell(row=r0, column=9+j, value=v).font = F_DATA
             r0 += 1
     wb.save(out)
-    return families
 
 # ---------- tanggal / umur ----------
 def parse_tanggal(s):
@@ -332,17 +340,32 @@ def parse_kategori(teks):
         raise ValueError(f'Kategori umur tidak dikenal: {", ".join(sorted(salah))}')
     return [k for k in KATEGORI_UMUR if k in dipilih]
 
-def rencana_file_kategori(desa, keys):
-    """[(nama file, label tombol, keys)] untuk kategori terpilih. Lebih dari satu
-    kategori = file gabungan dulu, lalu tetap satu file terpisah per kategori."""
+PILIHAN_FILE = ('rekap', 'popm', 'terpisah', 'gabungan')
+
+def parse_pilihan_file(teks):
+    """Field web 'file' (mis. "popm,gabungan") -> set pilihan. None (field tidak
+    dikirim, klien lama) = semua; string kosong = tidak ada yang dipilih."""
+    if teks is None: return set(PILIHAN_FILE)
+    dipilih = {k.strip() for k in teks.split(',') if k.strip()}
+    salah = dipilih - set(PILIHAN_FILE)
+    if salah:
+        raise ValueError(f'Pilihan file tidak dikenal: {", ".join(sorted(salah))}')
+    return dipilih
+
+def rencana_file_kategori(desa, keys, pilihan=PILIHAN_FILE):
+    """[(nama file, label tombol, keys)] untuk kategori terpilih: file gabungan
+    (kalau > 1 kategori) dan/atau satu file per kategori, sesuai pilihan. Satu
+    kategori saja = satu file, entah yang dicentang terpisah atau gabungan."""
     out = []
-    if len(keys) > 1:
+    gabungan, terpisah = 'gabungan' in pilihan, 'terpisah' in pilihan
+    if len(keys) > 1 and gabungan:
         kode = ('SEMUA KATEGORI' if len(keys) == len(KATEGORI_UMUR)
                 else '-'.join(KATEGORI_UMUR[k][3] for k in keys))
         out.append((f'DESA {desa} GABUNGAN {kode}.xlsx',
                     'Gabungan: ' + ' + '.join(ttl(KATEGORI_UMUR[k][3]) for k in keys), keys))
-    for k in keys:
-        out.append((f'DESA {desa} {KATEGORI_UMUR[k][4]}.xlsx', KATEGORI_UMUR[k][0], [k]))
+    if terpisah or (len(keys) == 1 and gabungan):
+        for k in keys:
+            out.append((f'DESA {desa} {KATEGORI_UMUR[k][4]}.xlsx', KATEGORI_UMUR[k][0], [k]))
     return out
 
 def ttl(x):
@@ -465,41 +488,53 @@ def build_per_kategori(families, doc, acuan, out, keys):
     wb.save(out)
     return tot
 
-def convert(pdf_path, acuan, outdir, kategori=()):
-    doc = parse_pdf(pdf_path)
+def konversi(pdf, acuan, kategori=(), pilihan=PILIHAN_FILE):
+    """PDF (path atau file-like) -> file Excel yang dipilih, di memori.
+    Hasil: files = [{'name', 'label', 'jenis', 'data' (bytes)}] + statistik."""
+    if not ({'rekap', 'popm'} & set(pilihan) or rencana_file_kategori('', kategori, pilihan)):
+        raise ValueError('Belum ada file yang dipilih. Centang minimal satu file, '
+                         'atau pilih kategori umur untuk file per kategori.')
+    doc = parse_pdf(pdf)
     desa = (doc['info'].get('desa') or 'DESA').replace("'", '').replace(' ', '_')
     rt = (doc['info'].get('rt') or '').replace(' ', '')
-    os.makedirs(outdir, exist_ok=True)
-    conv = os.path.join(outdir, f'REKAP {desa} {rt} converted.xlsx')
-    summ = os.path.join(outdir, f'DESA {desa}.xlsx')
-    fams = build_converted(doc, conv)
-    qa = build_summary(fams, doc, acuan, summ)
-    kat_files, kat_tot = [], []
-    for nama, label, keys in rencana_file_kategori(desa, kategori):
-        tot = build_per_kategori(fams, doc, acuan, os.path.join(outdir, nama), keys)
-        kat_files.append({'name': nama, 'label': label})
-        if len(keys) == 1: kat_tot.append({'label': label, 'jumlah': tot[keys[0]]})
+    fams = kumpulkan_keluarga(doc)
+    files = []
+    def tambah(nama, label, jenis, buf):
+        files.append({'name': nama, 'label': label, 'jenis': jenis, 'data': buf.getvalue()})
+    if 'rekap' in pilihan:
+        buf = io.BytesIO(); build_converted(doc, buf)
+        tambah(f'REKAP {desa} {rt} converted.xlsx', 'REKAP Lengkap (Replika Konverter)', 'rekap', buf)
+    buf = io.BytesIO()
+    qa = build_summary(fams, doc, acuan, buf)      # qa selalu dihitung untuk statistik
+    if 'popm' in pilihan:
+        tambah(f'DESA {desa}.xlsx', 'DESA Ringkasan KK (≥ 18 tahun)', 'popm', buf)
+    kat_tot = {}
+    for nama, label, keys in rencana_file_kategori(desa, kategori, pilihan):
+        buf = io.BytesIO(); tot = build_per_kategori(fams, doc, acuan, buf, keys)
+        tambah(nama, label, 'gabungan' if len(keys) > 1 else 'kategori', buf)
+        kat_tot.update((k, tot[k]) for k in keys)
     ring = (doc['ringkasan'] or {}).get('ringkasan', {}).get('jumlah_keluarga', [None])[0]
-    return {'converted': os.path.basename(conv), 'summary': os.path.basename(summ),
-            'kategori_files': kat_files, 'kategori_tot': kat_tot,
-            'families': len(fams), 'ringkasan_keluarga': ring, 'qa': qa}
+    return {'files': files, 'families': len(fams), 'ringkasan_keluarga': ring, 'qa': qa,
+            'kategori_tot': [{'label': KATEGORI_UMUR[k][0], 'jumlah': kat_tot[k]}
+                             for k in KATEGORI_UMUR if k in kat_tot]}
 
-def convert_bytes(pdf_bytes, acuan, outdir, kategori=()):
+def convert(pdf_path, acuan, outdir, kategori=(), pilihan=PILIHAN_FILE):
+    """Seperti konversi(), tapi file ditulis ke outdir (hasil tanpa bytes)."""
+    res = konversi(pdf_path, acuan, kategori, pilihan)
+    os.makedirs(outdir, exist_ok=True)
+    for f in res['files']:
+        with open(os.path.join(outdir, f['name']), 'wb') as fh:
+            fh.write(f.pop('data'))
+    return res
+
+def convert_bytes(pdf_bytes, acuan, outdir, kategori=(), pilihan=PILIHAN_FILE):
     """Konversi dari bytes (untuk web upload)."""
-    import tempfile
-    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tf:
-        tf.write(pdf_bytes)
-        tmp = tf.name
-    try:
-        return convert(tmp, acuan, outdir, kategori)
-    finally:
-        os.unlink(tmp)
+    return convert(io.BytesIO(pdf_bytes), acuan, outdir, kategori, pilihan)
 
 if __name__ == '__main__':
     pdf_path = sys.argv[1]
     acuan = datetime.date.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 else datetime.date.today()
     outdir = sys.argv[3] if len(sys.argv) > 3 else os.path.dirname(pdf_path) or '.'
     res = convert(pdf_path, acuan, outdir)
-    res['converted'] = os.path.join(outdir, res['converted'])
-    res['summary'] = os.path.join(outdir, res['summary'])
+    for f in res['files']: f['name'] = os.path.join(outdir, f['name'])
     print(json.dumps(res, indent=2, default=str))

@@ -23,7 +23,8 @@ def main():
         assert acuan, 'acuan date empty'
         print('2. acuan default:', acuan)
 
-        # 2b. pick two age categories -> expect merged file + 2 separate files
+        # 2b. skip REKAP, pick two age categories -> expect POPM + merged + 2 separate
+        page.uncheck('#out-rekap')
         page.check('#kat-balita')
         page.check('#kat-lansia')
 
@@ -47,22 +48,16 @@ def main():
         print('5. QA panel:', qa)
         assert '119' in qa, 'family count 119 missing from QA panel'
 
-        # 6. download base files + category files and validate
-        with page.expect_download() as d1:
-            page.click('#lconv')
-        f1 = d1.value
-        with page.expect_download() as d2:
-            page.click('#lsumm')
-        f2 = d2.value
-        kat_links = page.locator('#lkat a')
-        assert kat_links.count() == 3, f'expected 3 category files, got {kat_links.count()}'
-        kat_names = []
-        for i in range(kat_links.count()):
+        # 6. download every offered file; REKAP must be absent
+        links = page.locator('#lfiles a')
+        assert links.count() == 4, f'expected 4 files, got {links.count()}'
+        names = []
+        for i in range(links.count()):
             with page.expect_download() as dk:
-                kat_links.nth(i).click()
-            kat_names.append(dk.value.suggested_filename)
-        print('6. downloads triggered:', f1.suggested_filename, '|', f2.suggested_filename,
-              '|', ' | '.join(kat_names))
+                links.nth(i).click()
+            names.append(dk.value.suggested_filename)
+        assert not any(n.startswith('REKAP') for n in names), f'REKAP not requested: {names}'
+        print('6. downloads triggered:', ' | '.join(names))
 
         page.screenshot(path=os.path.join(BASE, 'output', 'e2e_result.png'), full_page=True)
         browser.close()

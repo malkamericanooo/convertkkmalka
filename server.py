@@ -2,7 +2,7 @@
 """Web app lokal: PDF Rekapitulasi -> file Excel pilihan (REKAP, form POPM, kategori umur).
 Jalankan:  python3 server.py   lalu buka  http://localhost:8787
 """
-import os, datetime, json
+import os, datetime, json, io, base64
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import urllib.parse
 import app as conv
@@ -23,9 +23,10 @@ def parse_multipart(body, content_type):
         chunk = chunk.strip(b'\r\n-')
         if not chunk or chunk == b'--':
             continue
-        if b'\r\n\r\n' not in chunk:
-            continue
-        head, payload = chunk.split(b'\r\n\r\n', 1)
+        if b'\r\n\r\n' in chunk:
+            head, payload = chunk.split(b'\r\n\r\n', 1)
+        else:  # field kosong (mis. semua centang dimatikan): tetap dicatat sebagai ''
+            head, payload = chunk, b''
         head = head.decode('utf-8', 'replace')
         name = filename = None
         for line in head.split('\r\n'):
@@ -209,8 +210,15 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
-        if u.path in ('/', '/index.html'):
-            self._send(200, 'text/html; charset=utf-8', PAGE.encode())
+        halaman = {'/': 'index.html', '/index.html': 'index.html', '/kebijakan': 'kebijakan.html'}
+        if u.path in halaman:
+            # halaman yang sama dengan versi Vercel (api/*.html); PAGE lama hanya cadangan
+            path = os.path.join(BASE, 'api', halaman[u.path])
+            if os.path.isfile(path):
+                with open(path, 'rb') as f:
+                    self._send(200, 'text/html; charset=utf-8', f.read())
+            else:
+                self._send(200, 'text/html; charset=utf-8', PAGE.encode())
         elif u.path == '/dl':
             try:
                 name = os.path.basename(urllib.parse.parse_qs(u.query).get('name', [''])[0])
@@ -228,7 +236,7 @@ class H(BaseHTTPRequestHandler):
             self._send(404, 'text/plain', b'not found')
 
     def do_POST(self):
-        if urllib.parse.urlparse(self.path).path != '/convert':
+        if urllib.parse.urlparse(self.path).path not in ('/convert', '/api/convert'):
             self._send(404, 'text/plain', b'not found'); return
         ctype = self.headers.get('Content-Type', '')
         try:
@@ -254,7 +262,12 @@ class H(BaseHTTPRequestHandler):
             acuan = datetime.date.fromisoformat(acuan_str) if acuan_str else datetime.date.today()
             kategori = conv.parse_kategori(fields.get('kategori'))
             pilihan = conv.parse_pilihan_file(fields.get('file'))
-            res = conv.convert_bytes(data, acuan, OUT, kategori, pilihan)
+            format2 = conv.parse_format2(fields.get('format2'))
+            res = conv.konversi(io.BytesIO(data), acuan, kategori, pilihan, format2)
+            os.makedirs(OUT, exist_ok=True)          # salinan lokal di komputer sendiri
+            for f in res['files']:
+                with open(os.path.join(OUT, os.path.basename(f['name'])), 'wb') as fh:
+                    fh.write(f['data'])
             warn = []
             qa = res['qa']
             if qa['tanpa_tanggal']:
@@ -262,7 +275,8 @@ class H(BaseHTTPRequestHandler):
             if qa['umur_anomali']:
                 warn.append(f"{len(qa['umur_anomali'])} umur anomali (<0 atau >120)")
             self._send(200, 'application/json', json.dumps({
-                'ok': True, 'files': res['files'], 'kategori_tot': res['kategori_tot'],
+                'ok': True, 'kategori_tot': res['kategori_tot'], 'format2': res['format2'],
+                'files': [dict(f, data=base64.b64encode(f['data']).decode('utf-8')) for f in res['files']],
                 'families': res['families'], 'penduduk': qa['total_penduduk'],
                 'dewasa': qa['total_dewasa'], 'anak': qa['total_anak'],
                 'ringkasan': res['ringkasan_keluarga'],

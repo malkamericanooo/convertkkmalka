@@ -307,6 +307,14 @@ input[type="file"] { display: none; }
   color: var(--accent);
 }
 
+.kebijakan-box { background:#fff8e6; border:1px solid #f0d58a; border-radius:10px; padding:12px 14px; font-size:.85rem; line-height:1.5; margin:0 0 18px; color:#5c4a00; }
+.kebijakan-box a, .kaki a { color:inherit; font-weight:600; }
+.f2info { margin-top:12px; background:rgba(245, 158, 11, 0.08); border:1px solid rgba(245, 158, 11, 0.3); border-radius:var(--radius); padding:12px 16px; font-size:.875rem; line-height:1.55; color:var(--text); }
+.f2info strong { color:#fbbf24; }
+.f2info li { color:var(--text-dim); }
+.f2info div + div { margin-top:10px; }
+.f2info ul { margin:6px 0 0 18px; padding:0; }
+.kaki { margin-top:18px; font-size:.78rem; color:#6b7280; text-align:center; }
 .warning {
   margin-top: 12px;
   padding: 12px 16px;
@@ -356,6 +364,14 @@ input[type="file"] { display: none; }
   <h1>Konverter Rekapitulasi Data Keluarga</h1>
   <p class="subtitle">PDF ekspor pemerintah → Excel, pilih file yang dibutuhkan saja</p>
 
+  <div class="kebijakan-box" role="note">
+    <strong>Sebelum memakai:</strong> alat ini khusus petugas kesehatan dan kader yang berwenang.
+    Kami (pengembang) <b>tidak menyimpan, tidak melihat, dan tidak memakai data warga</b>: PDF hanya diproses
+    sesaat untuk dikonversi, hasilnya langsung dikirim ke browser Anda, lalu dibuang.
+    Penanggung jawab data adalah <b>instansi kesehatan</b> yang mengunggahnya. Hasil otomatis bisa keliru, wajib diperiksa.
+    <a href="/kebijakan">Baca ketentuan &amp; kebijakan data</a>
+  </div>
+
   <form id="f" method="post" action="/api/convert" enctype="multipart/form-data">
     <div class="section">
       <label class="section-label">
@@ -396,6 +412,20 @@ input[type="file"] { display: none; }
     <div class="section">
       <label class="section-label">
         <span class="step-num">4</span>
+        Format Kedua: Template Bayi &amp; Balita
+      </label>
+      <div class="kat-list" id="f2-list">
+        <label class="kat"><input type="checkbox" id="f2-bayi" value="bayi"><span>Bayi · Format Kedua<small>0–11 bulan, sesuai template_bayi (versi kedua)</small></span></label>
+        <label class="kat"><input type="checkbox" id="f2-balita" value="balita"><span>Balita · Format Kedua<small>12–59 bulan, sesuai template_balita (versi kedua)</small></span></label>
+      </div>
+      <div class="field-hint">Ini <b>format kedua</b>: satu file per kategori (tanpa versi gabungan), kolomnya persis template impor.
+        Alamat diisi RT, jenis kelamin dibaca dari NIK, orang tua dari KK yang sama. Tempat lahir, nomor HP, dan posyandu
+        tidak ada di PDF sehingga dikosongkan (posyandu diisi otomatis kalau PDF menyebutnya). Sel <b>kuning</b> = perlu dicek petugas.</div>
+    </div>
+
+    <div class="section">
+      <label class="section-label">
+        <span class="step-num">5</span>
         File PDF
       </label>
       <div class="drop-zone" id="drop">
@@ -419,6 +449,7 @@ input[type="file"] { display: none; }
 
     <div class="stats" id="stats"></div>
     <div class="warning" id="warn" style="display:none"></div>
+    <div class="f2info" id="f2info" style="display:none"></div>
   </div>
 
   <div class="hint">
@@ -427,6 +458,7 @@ input[type="file"] { display: none; }
     Anggota ≥ 18 tahun dihitung ke kolom "Jumlah Anggota Keluarga".
     File kategori umur berisi 2 sheet: "Jumlah per KK" (jumlah KK di paling atas, lalu jumlah anggota per kategori) dan "Daftar Nama" (siapa KK-nya dan siapa anggotanya di tiap kategori, dibedakan warna).
   </div>
+  <p class="kaki"><a href="/kebijakan">Ketentuan &amp; kebijakan data</a> · Data warga tidak disimpan oleh alat ini · Penanggung jawab data: instansi kesehatan pengguna</p>
 </div>
 
 <script>
@@ -487,9 +519,9 @@ form.onsubmit = async e => {
   e.preventDefault();
   if (!pdf.files[0]) return;
 
-  const file = dicentang('#out-list'), kategori = dicentang('#kat-list');
+  const file = dicentang('#out-list'), kategori = dicentang('#kat-list'), format2 = dicentang('#f2-list');
   const adaFileKategori = kategori.length > 0 && (file.includes('terpisah') || file.includes('gabungan'));
-  if (!file.includes('rekap') && !file.includes('popm') && !adaFileKategori) {
+  if (!file.includes('rekap') && !file.includes('popm') && !adaFileKategori && !format2.length) {
     status.textContent = '⚠️ Belum ada file yang dipilih. Centang minimal satu file, atau pilih kategori umur untuk file per kategori.';
     status.className = 'status error';
     return;
@@ -504,6 +536,7 @@ form.onsubmit = async e => {
   const fd = new FormData(form);
   fd.set('file', file.join(','));
   fd.set('kategori', kategori.join(','));
+  fd.set('format2', format2.join(','));
 
   try {
     let r, j;
@@ -541,7 +574,7 @@ form.onsubmit = async e => {
     }
 
     // Satu tombol download per file yang dipilih
-    const ikon = { rekap: '📊', popm: '📋', gabungan: '🗂️', kategori: '👨‍👩‍👧' };
+    const ikon = { rekap: '📊', popm: '📋', gabungan: '🗂️', kategori: '👨‍👩‍👧', format2: '🍼' };
     const lfiles = document.getElementById('lfiles');
     lfiles.replaceChildren();
     for (const f of j.files) {
@@ -583,6 +616,26 @@ form.onsubmit = async e => {
         <span class="stats-value">${j.ringkasan} KK</span>
       </div>` : ''}
     `;
+
+    // Catatan format kedua: jumlah anak, sel yang ditandai, kolom yang kosong dari sumbernya
+    const f2 = document.getElementById('f2info');
+    f2.replaceChildren();
+    for (const x of (j.format2 || [])) {
+      const blok = document.createElement('div');
+      const judul = document.createElement('strong');
+      judul.textContent = `${x.label}: ${x.jumlah} anak`;
+      blok.appendChild(judul);
+      const ul = document.createElement('ul');
+      const item = t => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); };
+      if (!x.jumlah) item('Tidak ada anak di rentang umur ini pada tanggal acuan. File tetap dibuat (kosong).');
+      for (const d of x.ditandai) item(`🟨 ${d.jumlah} sel ditandai kuning: ${d.alasan}`);
+      item(x.posyandu ? `Nama Posyandu diambil dari PDF: ${x.posyandu}.`
+                      : 'Nama Posyandu tidak tercantum di PDF sumber, jadi kolomnya dibiarkan kosong. Isi manual kalau perlu.');
+      item('Tempat Lahir dan Nomor HP tidak ada di PDF sumber, jadi dibiarkan kosong.');
+      blok.appendChild(ul);
+      f2.appendChild(blok);
+    }
+    f2.style.display = (j.format2 || []).length ? 'block' : 'none';
 
     const warn = document.getElementById('warn');
     if (j.warn) {

@@ -1,12 +1,35 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/convert.py", "use": "@vercel/python" },
-    { "src": "api/index.html", "use": "@vercel/static" }
+    {
+      "src": "api/convert.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/index.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "api/kebijakan.html",
+      "use": "@vercel/static"
+    }
   ],
   "routes": [
-    { "src": "/api/convert", "dest": "/api/convert.py" },
-    { "src": "/api/dl", "dest": "/api/convert.py" },
-    { "src": "/(.*)", "dest": "/api/index.html" }
+    {
+      "src": "/api/convert",
+      "dest": "/api/convert.py"
+    },
+    {
+      "src": "/api/dl",
+      "dest": "/api/convert.py"
+    },
+    {
+      "src": "/kebijakan",
+      "dest": "/api/kebijakan.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.html"
+    }
   ]
 }

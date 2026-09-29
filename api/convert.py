@@ -36,9 +36,10 @@ class handler(BaseHTTPRequestHandler):
             chunk = chunk.strip(b'\r\n-')
             if not chunk or chunk == b'--':
                 continue
-            if b'\r\n\r\n' not in chunk:
-                continue
-            head, payload = chunk.split(b'\r\n\r\n', 1)
+            if b'\r\n\r\n' in chunk:
+                head, payload = chunk.split(b'\r\n\r\n', 1)
+            else:  # field kosong (mis. semua centang dimatikan): tetap dicatat sebagai ''
+                head, payload = chunk, b''
             head = head.decode('utf-8', 'replace')
             name = filename = None
             for line in head.split('\r\n'):
@@ -55,8 +56,9 @@ class handler(BaseHTTPRequestHandler):
         return fields, files
 
     def do_GET(self):
-        if self.path in ('/', '/index.html'):
-            html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'index.html')
+        halaman = {'/': 'index.html', '/index.html': 'index.html', '/kebijakan': 'kebijakan.html'}
+        if self.path in halaman:
+            html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), halaman[self.path])
             with open(html_path, 'rb') as f:
                 html = f.read()
             self._send(200, 'text/html; charset=utf-8', html)
@@ -87,9 +89,10 @@ class handler(BaseHTTPRequestHandler):
             acuan = datetime.date.fromisoformat(acuan_str) if acuan_str else datetime.date.today()
             kategori = converter.parse_kategori(fields.get('kategori'))
             pilihan = converter.parse_pilihan_file(fields.get('file'))
+            format2 = converter.parse_format2(fields.get('format2'))
 
-            # Parse PDF + build only the chosen xlsx files, all in memory
-            res = converter.konversi(io.BytesIO(data), acuan, kategori, pilihan)
+            # Parse PDF + build only the chosen xlsx files, all in memory (tidak ada yang disimpan)
+            res = converter.konversi(io.BytesIO(data), acuan, kategori, pilihan, format2)
             qa = res['qa']
 
             # Warnings
@@ -111,6 +114,7 @@ class handler(BaseHTTPRequestHandler):
                 'files': [dict(f, data=base64.b64encode(f['data']).decode('utf-8'))
                           for f in res['files']],
                 'kategori_tot': res['kategori_tot'],
+                'format2': res['format2'],
             })
         except Exception as e:
             self._send_json(400, {'ok': False, 'error': str(e)})

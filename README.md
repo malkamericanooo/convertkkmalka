@@ -9,6 +9,28 @@ PDF ekspor pemerintah (Rekapitulasi Data Keluarga / BKKBN) → **Excel**, tanpa 
 | `DESA ... <KATEGORI>.xlsx` | Satu file per kategori umur yang dicentang di web. Sheet **Jumlah per KK**: jumlah KK + total kategori di atas, lalu per KK jumlah di kategori, di luar kategori, total. Sheet **Daftar Nama**: satu baris per anggota yang masuk kategori (No. KK, Nama KK, nama, hubungan, tgl lahir, umur th/bl, kategori), berwarna per kategori; KK tanpa anggota di kategori itu tidak ikut |
 | `DESA ... GABUNGAN <...>.xlsx` | Hanya kalau dicentang > 1 kategori: satu kolom per kategori + jumlah kategori terpilih; Daftar Nama berisi semua kategori terpilih, dibedakan warna (Balita pink, Pra Sekolah oranye, Remaja kuning, Dewasa biru, Lansia ungu) |
 
+## Format Kedua (template impor Bayi & Balita)
+
+Pilihan terpisah di web (langkah 4). Dua file sendiri-sendiri, **tanpa versi gabungan**, kolomnya persis
+`templates/template_bayi.xlsx` dan `templates/template_balita.xlsx` (header, dropdown Ya/Tidak & Posyandu,
+lebar kolom, kolom X tersembunyi). Baris contoh "Arya" dibuang.
+
+| Kolom | Isi |
+|---|---|
+| Nama, Tanggal Lahir (`dd/mm/yyyy`), NIK | dari PDF |
+| Alamat | RT dari header PDF (mis. `RT 010`) |
+| Jenis Kelamin | dari NIK (digit 7–8, perempuan +40), **hanya** kalau tanggal di NIK = tanggal lahir; kalau beda: kosong + sel kuning |
+| Ayah / Ibu / NIK Ibu | KK dan ISTRI di KK yang sama (anak berstatus ANAK); kalau tidak ada tepat satu ISTRI: kosong + sel kuning |
+| Belum punya NIK? | Ya kalau NIK kosong / bukan 16 digit (sel NIK kuning) |
+| Tidak diasuh orang tua? / Wali | Tidak untuk ANAK; selain ANAK: Ya + KK sebagai wali (sel kuning) |
+| Nama Posyandu | diambil kalau PDF menyebut "POSYANDU ..."; kalau tidak, kosong (web memberi tahu) |
+| Tempat Lahir, Nomor HP | tidak ada di PDF → kosong |
+
+Umur dalam bulan penuh pada tanggal acuan: Bayi 0–11 bulan, Balita 12–59 bulan (jumlah keduanya = kategori
+Bayi Balita 0–59 bulan). Web menampilkan jumlah anak, sel yang ditandai, dan kolom yang kosong dari sumbernya.
+
+Ketentuan & kebijakan data: `/kebijakan` (`api/kebijakan.html`).
+
 ## Cara pakai
 
 ### Lokal (Python)

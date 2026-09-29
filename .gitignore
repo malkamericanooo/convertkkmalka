@@ -3,6 +3,8 @@
 *.xlsx
 !requirements.txt
 !vercel.json
+# template impor Format Kedua: hanya berisi baris contoh (Arya, Surabaya, xxx), bukan data warga
+!templates/*.xlsx
 
 # Python
 __pycache__/

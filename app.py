@@ -10,6 +10,7 @@ Konverter PDF Rekapitulasi Data Keluarga (BKKBN) -> Excel
 import re, datetime, os, sys, json, io
 import pdfplumber
 import openpyxl
+import openpyxl.comments, openpyxl.worksheet.cell_range
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
 
@@ -148,6 +149,9 @@ def parse_pdf(pdf_path):
                     doc['ringkasan'] = parse_ringkasan(page)
                     continue
                 rows, greens, text = page_data(page)
+                if not doc.get('posyandu'):
+                    m = re.search(r"POSYANDU[ \t:]+([A-Z0-9][A-Z0-9 .'/-]{1,40})", text.upper())
+                    if m: doc['posyandu'] = 'POSYANDU ' + m.group(1).strip()
                 rows = [[clean(v) for v in row[:25]] for row in rows]
                 # buang baris kosong SEKALIGUS geser index greens agar tetap cocok
                 kept, ng = [], set()
@@ -576,10 +580,111 @@ def tulis_daftar_nama(ws, families, doc, acuan, keys):
         ws.cell(row=r, column=1, value='Tidak ada anggota di kategori ini.').font = F_DATA
     ws.freeze_panes = f'C{hdr + 1}'
 
-def konversi(pdf, acuan, kategori=(), pilihan=PILIHAN_FILE):
+# ---------------------------------------------------------------------------
+# FORMAT KEDUA: template impor khusus Bayi dan Balita (dua file terpisah, tanpa
+# versi gabungan). Isi kolom persis mengikuti templates/template_bayi.xlsx dan
+# templates/template_balita.xlsx (header, dropdown, lebar kolom, kolom X tersembunyi).
+# ---------------------------------------------------------------------------
+TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+FORMAT2 = {
+    # key: (label tombol, umur min bulan, umur max bulan, file template, nama file hasil)
+    'bayi':   ('Bayi 0–11 Bulan (Format Kedua)', 0, 11, 'template_bayi.xlsx', 'BAYI 0-11 BULAN (FORMAT KEDUA)'),
+    'balita': ('Balita 12–59 Bulan (Format Kedua)', 12, 59, 'template_balita.xlsx', 'BALITA 12-59 BULAN (FORMAT KEDUA)'),
+}
+TANDA = PatternFill('solid', fgColor='FFFFE699')   # kuning: sel yang perlu dicek petugas
+
+def parse_format2(teks):
+    """Field web 'format2' (mis. "bayi,balita") -> list key."""
+    dipilih = {k.strip() for k in (teks or '').split(',') if k.strip()}
+    salah = dipilih - FORMAT2.keys()
+    if salah:
+        raise ValueError(f'Format kedua tidak dikenal: {", ".join(sorted(salah))}')
+    return [k for k in FORMAT2 if k in dipilih]
+
+def umur_bulan(lahir, acuan):
+    return (acuan.year - lahir.year) * 12 + acuan.month - lahir.month - (1 if acuan.day < lahir.day else 0)
+
+def jk_dari_nik(nik, lahir):
+    """Digit 7-12 NIK = DDMMYY, tanggal +40 untuk perempuan. Hanya dipakai kalau
+    tanggal di NIK sama dengan tanggal lahir; kalau beda, dikosongkan dan ditandai."""
+    if not re.fullmatch(r'\d{16}', nik or ''):
+        return '', None
+    dd, mm, yy = int(nik[6:8]), int(nik[8:10]), int(nik[10:12])
+    jk = 'P' if dd > 40 else 'L'
+    if dd > 40: dd -= 40
+    if (dd, mm, yy) != (lahir.day, lahir.month, lahir.year % 100):
+        return '', 'Jenis kelamin tidak diisi: tanggal lahir di NIK berbeda dengan TANGGAL LAHIR di PDF. Cek manual.'
+    return jk, None
+
+def keluarga_lengkap(doc):
+    """Seperti kumpulkan_keluarga(), tapi tiap anggota menyimpan NIK juga."""
+    families, cur = [], None
+    for pg in doc['pages']:
+        for i, row in enumerate(pg['rows']):
+            v = cast_row(row)
+            hub = str(v[4] or '').strip().upper()
+            if i in pg['greens'] or hub == 'KK':
+                cur = []; families.append(cur)
+            if cur is not None:
+                cur.append({'hub': hub, 'lahir': v[5], 'nama': str(v[3] or '').strip(),
+                            'nik': re.sub(r'\D', '', str(v[2] or ''))})
+    return families
+
+def build_format2(doc, acuan, key, out):
+    """Isi template format kedua. Kembalian: statistik untuk ditampilkan di web."""
+    label, bmin, bmax, tpl, _ = FORMAT2[key]
+    wb = openpyxl.load_workbook(os.path.join(TEMPLATE_DIR, tpl))
+    ws = wb.active
+    for c in range(1, 15):          # buang baris contoh (Arya, Surabaya)
+        ws.cell(row=2, column=c).value = None
+    rt = (doc['info'].get('rt') or '').strip()
+    posyandu = doc.get('posyandu') or ''
+    r, tanda = 2, {}
+    def tandai(cell, alasan):
+        cell.fill = TANDA
+        cell.comment = openpyxl.comments.Comment(alasan, 'Konverter')
+        tanda[alasan] = tanda.get(alasan, 0) + 1
+    for fam in keluarga_lengkap(doc):
+        kk = next((m for m in fam if m['hub'] == 'KK'), None)
+        istri = [m for m in fam if m['hub'] == 'ISTRI']
+        for m in fam:
+            lahir = parse_tanggal(m['lahir'])
+            if lahir is None or m['hub'] == 'KK': continue
+            bl = umur_bulan(lahir, acuan)
+            if not (bmin <= bl <= bmax): continue
+            punya_nik = bool(re.fullmatch(r'\d{16}', m['nik']))
+            jk, masalah_jk = jk_dari_nik(m['nik'], lahir)
+            anak_kk = m['hub'] == 'ANAK'
+            ibu = istri[0] if anak_kk and len(istri) == 1 else None
+            nilai = [m['nama'], None, lahir.strftime('%d/%m/%Y'), jk or None, None, rt or None,
+                     posyandu or None, 'Tidak' if punya_nik else 'Ya', m['nik'] if punya_nik else None,
+                     'Tidak' if anak_kk else 'Ya',
+                     kk['nama'] if (ibu and kk) else None, ibu['nama'] if ibu else None,
+                     (ibu['nik'] or None) if ibu else None,
+                     kk['nama'] if (not anak_kk and kk) else None]
+            for c, v in enumerate(nilai, 1):
+                cell = ws.cell(row=r, column=c, value=v)
+                cell.number_format = '@'
+            if masalah_jk: tandai(ws.cell(row=r, column=4), masalah_jk)
+            if not punya_nik: tandai(ws.cell(row=r, column=9), 'NIK anak kosong atau tidak 16 digit di PDF.')
+            if anak_kk and not ibu:
+                tandai(ws.cell(row=r, column=11), 'Orang tua tidak bisa ditentukan dari KK (tidak ada tepat satu ISTRI). Isi manual.')
+            if not anak_kk:
+                tandai(ws.cell(row=r, column=10), 'Anak bukan berstatus ANAK di KK: diisi "Ya", Kepala Keluarga ditulis sebagai wali. Cek manual.')
+            r += 1
+    jumlah = r - 2
+    if jumlah > 99:                 # dropdown template cuma sampai baris 100
+        for dv in ws.data_validations.dataValidation:
+            dv.sqref = openpyxl.worksheet.cell_range.MultiCellRange(
+                str(dv.sqref).replace('100', str(jumlah + 1)))
+    wb.save(out)
+    return {'label': label, 'jumlah': jumlah, 'posyandu': posyandu,
+            'ditandai': [{'alasan': a, 'jumlah': n} for a, n in tanda.items()]}
+
+def konversi(pdf, acuan, kategori=(), pilihan=PILIHAN_FILE, format2=()):
     """PDF (path atau file-like) -> file Excel yang dipilih, di memori.
     Hasil: files = [{'name', 'label', 'jenis', 'data' (bytes)}] + statistik."""
-    if not ({'rekap', 'popm'} & set(pilihan) or rencana_file_kategori('', kategori, pilihan)):
+    if not ({'rekap', 'popm'} & set(pilihan) or rencana_file_kategori('', kategori, pilihan) or format2):
         raise ValueError('Belum ada file yang dipilih. Centang minimal satu file, '
                          'atau pilih kategori umur untuk file per kategori.')
     doc = parse_pdf(pdf)
@@ -601,23 +706,29 @@ def konversi(pdf, acuan, kategori=(), pilihan=PILIHAN_FILE):
         buf = io.BytesIO(); tot = build_per_kategori(fams, doc, acuan, buf, keys)
         tambah(nama, label, 'gabungan' if len(keys) > 1 else 'kategori', buf)
         kat_tot.update((k, tot[k]) for k in keys)
+    info_f2 = []
+    for k in format2:
+        buf = io.BytesIO(); st = build_format2(doc, acuan, k, buf)
+        tambah(f'DESA {desa} {rt} {FORMAT2[k][4]}.xlsx'.replace('  ', ' '), FORMAT2[k][0], 'format2', buf)
+        info_f2.append(st)
     ring = (doc['ringkasan'] or {}).get('ringkasan', {}).get('jumlah_keluarga', [None])[0]
     return {'files': files, 'families': len(fams), 'ringkasan_keluarga': ring, 'qa': qa,
+            'format2': info_f2,
             'kategori_tot': [{'label': KATEGORI_UMUR[k][0], 'jumlah': kat_tot[k]}
                              for k in KATEGORI_UMUR if k in kat_tot]}
 
-def convert(pdf_path, acuan, outdir, kategori=(), pilihan=PILIHAN_FILE):
+def convert(pdf_path, acuan, outdir, kategori=(), pilihan=PILIHAN_FILE, format2=()):
     """Seperti konversi(), tapi file ditulis ke outdir (hasil tanpa bytes)."""
-    res = konversi(pdf_path, acuan, kategori, pilihan)
+    res = konversi(pdf_path, acuan, kategori, pilihan, format2)
     os.makedirs(outdir, exist_ok=True)
     for f in res['files']:
         with open(os.path.join(outdir, f['name']), 'wb') as fh:
             fh.write(f.pop('data'))
     return res
 
-def convert_bytes(pdf_bytes, acuan, outdir, kategori=(), pilihan=PILIHAN_FILE):
+def convert_bytes(pdf_bytes, acuan, outdir, kategori=(), pilihan=PILIHAN_FILE, format2=()):
     """Konversi dari bytes (untuk web upload)."""
-    return convert(io.BytesIO(pdf_bytes), acuan, outdir, kategori, pilihan)
+    return convert(io.BytesIO(pdf_bytes), acuan, outdir, kategori, pilihan, format2)
 
 if __name__ == '__main__':
     pdf_path = sys.argv[1]

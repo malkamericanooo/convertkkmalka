@@ -208,10 +208,10 @@ def kumpulkan_keluarga(doc):
             vals = cast_row(row)
             if i in pg['greens'] or str(vals[4] or '').strip().upper() == 'KK':
                 cur = {'nama': vals[3], 'lahir': vals[5], 'kk_no': vals[0],
-                       'members': [(vals[4], vals[5])]}
+                       'members': [(vals[4], vals[5], vals[3])]}
                 families.append(cur)
             elif cur is not None:
-                cur['members'].append((vals[4], vals[5]))
+                cur['members'].append((vals[4], vals[5], vals[3]))
     return families
 
 def build_converted(doc, out):
@@ -298,13 +298,19 @@ def parse_tanggal(s):
 def umur_pada(lahir, acuan):
     return acuan.year - lahir.year - ((acuan.month, acuan.day) < (lahir.month, lahir.day))
 
+def umur_th_bl(lahir, acuan):
+    """Umur (tahun, bulan) penuh; tahunnya selalu sama dengan umur_pada()."""
+    bulan = ((acuan.year - lahir.year) * 12 + acuan.month - lahir.month
+             - (acuan.day < lahir.day))
+    return divmod(bulan, 12)
+
 def hitung_anggota(fam, acuan, umur_min=18, umur_max=None):
     """Satu keluarga -> jumlah anggota yang umurnya di dalam rentang
     [umur_min, umur_max] (dalam), di luar rentang (luar), total anggota, plus baris
     yang tanggal lahirnya tak terbaca / umurnya aneh. umur_max None = tanpa batas
     atas. Anggota tanpa umur valid masuk total tapi tidak ke dalam maupun luar."""
     h = {'dalam': 0, 'luar': 0, 'anggota': 0, 'tanpa_tanggal': [], 'umur_anomali': []}
-    for hub, lahir in fam['members']:
+    for hub, lahir, _ in fam['members']:
         h['anggota'] += 1
         b = parse_tanggal(lahir)
         if b is None:
@@ -331,6 +337,26 @@ KATEGORI_UMUR = {
     'dewasa':     ('Dewasa / Produktif (18–59 Tahun)', 18, 59, 'DEWASA', 'DEWASA 18-59 TAHUN'),
     'lansia':     ('Lansia (≥ 60 Tahun)', 60, None, 'LANSIA', 'LANSIA 60+ TAHUN'),
 }
+
+# Warna baris di sheet Daftar Nama: (isi sel, warna huruf) per kategori
+WARNA_KATEGORI = {
+    'balita':     ('FFFBEAF0', 'FF72243E'),   # pink
+    'prasekolah': ('FFFCE3CF', 'FF7A3A0A'),   # oranye
+    'sekolah':    ('FFFFF3BF', 'FF5C4A00'),   # kuning
+    'dewasa':     ('FFE6F1FB', 'FF0C447C'),   # biru
+    'lansia':     ('FFEEEDFE', 'FF3C3489'),   # ungu
+}
+
+def kategori_anggota(lahir, acuan):
+    """Tanggal lahir -> (key kategori, tahun, bulan), atau None kalau tanggal
+    lahirnya kosong/tak terbaca atau umurnya tidak wajar (sama seperti hitungan)."""
+    b = parse_tanggal(lahir)
+    if b is None: return None
+    u = umur_pada(b, acuan)
+    if u < 0 or u > 120: return None
+    for k, (_, a, z, _, _) in KATEGORI_UMUR.items():
+        if a <= u and (z is None or u <= z):
+            return (k,) + umur_th_bl(b, acuan)
 
 def parse_kategori(teks):
     """Field web 'kategori' (mis. "balita,dewasa") -> list key, urut KATEGORI_UMUR."""
@@ -485,8 +511,70 @@ def build_per_kategori(families, doc, acuan, out, keys):
             cell = ws.cell(row=hdr + n, column=j, value=v)
             cell.font = F_DATA; cell.border = BOX
     ws.freeze_panes = f'C{hdr + 1}'
+    ws.title = 'Jumlah per KK'
+    tulis_daftar_nama(wb.create_sheet('Daftar Nama'), families, doc, acuan, keys)
     wb.save(out)
     return tot
+
+def tulis_daftar_nama(ws, families, doc, acuan, keys):
+    """Sheet Daftar Nama: satu baris per anggota yang masuk kategori terpilih,
+    dikelompokkan per KK (urutan PDF). No. KK = No. Urut di sheet Jumlah per KK.
+    No & Nama KK diulang abu-abu di baris anggota berikutnya supaya tetap terbaca
+    kalau difilter; warna baris anggota = kategorinya."""
+    info = doc['info']
+    daftar, jumlah = [], dict.fromkeys(keys, 0)
+    for n, fam in enumerate(families, start=1):
+        orang = []
+        for hub, lahir, nama in fam['members']:
+            kat = kategori_anggota(lahir, acuan)
+            if kat and kat[0] in keys:
+                orang.append((nama, hub, lahir, kat)); jumlah[kat[0]] += 1
+        if orang: daftar.append((n, fam['nama'], orang))
+
+    for c, w in {'A': 8, 'B': 30, 'C': 30, 'D': 14, 'E': 14, 'F': 13, 'G': 30}.items():
+        ws.column_dimensions[c].width = w
+    ws['A1'] = 'DAFTAR NAMA ANGGOTA PER KEPALA KELUARGA'; ws['A1'].font = F_HDR
+    lokasi = [f'Desa {ttl(info["desa"])}' if info.get('desa') else '', rt_pendek(info),
+              f'Kec. {ttl(info["kecamatan"])}' if info.get('kecamatan') else '',
+              f'Kab. {ttl(info["kabupaten"])}' if info.get('kabupaten') else '']
+    ws['A2'] = ', '.join(x for x in lokasi if x); ws['A2'].font = F_DATA
+    ws['A3'] = f'Umur dihitung per tanggal {acuan:%d-%m-%Y}'; ws['A3'].font = F_DATA
+    r = 5
+    for k in keys:                                   # legenda warna + jumlah orang
+        isi, huruf = WARNA_KATEGORI[k]
+        c = ws.cell(row=r, column=1, value=f'{KATEGORI_UMUR[k][0]}: {jumlah[k]} orang')
+        c.font = Font(name='Arial', size=10, bold=True, color=huruf)
+        for j in (1, 2, 3): ws.cell(row=r, column=j).fill = PatternFill('solid', fgColor=isi)
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+        r += 1
+    ws.cell(row=r, column=1, value=f'dari {len(daftar)} KK').font = F_DATA
+
+    hdr = r + 2
+    for j, h in enumerate(['No. KK', 'Nama KK', 'Nama Anggota', 'Hubungan', 'Tanggal Lahir',
+                           'Umur', 'Kategori'], start=1):
+        cell = ws.cell(row=hdr, column=j, value=h)
+        cell.font = F_HDR; cell.border = BOX; cell.fill = GREEN_FILL
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    abu = Font(name='Arial', size=10, color='FF9E9E9E')
+    batas_kk = Border(left=THIN, right=THIN, top=Side(style='medium'), bottom=THIN)
+    r = hdr + 1
+    for n, nama_kk, orang in daftar:
+        for i, (nama, hub, lahir, (k, th, bl)) in enumerate(orang):
+            isi, huruf = WARNA_KATEGORI[k]
+            vals = [n, nama_kk, nama, hub, lahir, f'{th} th {bl} bl',
+                    KATEGORI_UMUR[k][0].split(' (')[0]]
+            for j, v in enumerate(vals, start=1):
+                cell = ws.cell(row=r, column=j, value=v)
+                cell.border = batas_kk if i == 0 else BOX
+                if j <= 2:
+                    cell.font = F_DATA if i == 0 else abu
+                else:
+                    cell.font = Font(name='Arial', size=10, color=huruf)
+                    cell.fill = PatternFill('solid', fgColor=isi)
+            r += 1
+    if not daftar:
+        ws.cell(row=r, column=1, value='Tidak ada anggota di kategori ini.').font = F_DATA
+    ws.freeze_panes = f'C{hdr + 1}'
 
 def konversi(pdf, acuan, kategori=(), pilihan=PILIHAN_FILE):
     """PDF (path atau file-like) -> file Excel yang dipilih, di memori.

@@ -6,8 +6,8 @@ PDF ekspor pemerintah (Rekapitulasi Data Keluarga / BKKBN) → **Excel**, tanpa 
 |---|---|
 | `REKAP ... converted.xlsx` | Replika tabel PDF (seperti konverter berbayar), file paling besar |
 | `DESA ....xlsx` | Form survey POPM Filariasis: per KK, jumlah anggota ≥ 18 tahun |
-| `DESA ... <KATEGORI>.xlsx` | Satu file per kategori umur yang dicentang di web. Paling atas: jumlah KK + total kategori. Lalu per KK: jumlah di kategori, di luar kategori, total |
-| `DESA ... GABUNGAN <...>.xlsx` | Hanya kalau dicentang > 1 kategori: satu kolom per kategori + jumlah kategori terpilih |
+| `DESA ... <KATEGORI>.xlsx` | Satu file per kategori umur yang dicentang di web. Sheet **Jumlah per KK**: jumlah KK + total kategori di atas, lalu per KK jumlah di kategori, di luar kategori, total. Sheet **Daftar Nama**: satu baris per anggota yang masuk kategori (No. KK, Nama KK, nama, hubungan, tgl lahir, umur th/bl, kategori), berwarna per kategori; KK tanpa anggota di kategori itu tidak ikut |
+| `DESA ... GABUNGAN <...>.xlsx` | Hanya kalau dicentang > 1 kategori: satu kolom per kategori + jumlah kategori terpilih; Daftar Nama berisi semua kategori terpilih, dibedakan warna (Balita pink, Pra Sekolah oranye, Remaja kuning, Dewasa biru, Lansia ungu) |
 
 ## Cara pakai
 

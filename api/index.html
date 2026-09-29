@@ -373,8 +373,8 @@ input[type="file"] { display: none; }
       <div class="kat-list" id="out-list">
         <label class="kat"><input type="checkbox" id="out-rekap" value="rekap" checked><span>REKAP Lengkap<small>salinan tabel PDF ke Excel (file paling besar)</small></span></label>
         <label class="kat"><input type="checkbox" id="out-popm" value="popm" checked><span>Form POPM: Ringkasan KK<small>per KK, jumlah anggota ≥ 18 tahun</small></span></label>
-        <label class="kat"><input type="checkbox" id="out-terpisah" value="terpisah" checked><span>Per Kategori Umur: File Terpisah<small>satu file untuk tiap kategori yang dicentang di bawah</small></span></label>
-        <label class="kat"><input type="checkbox" id="out-gabungan" value="gabungan" checked><span>Per Kategori Umur: File Gabungan<small>semua kategori yang dicentang dalam satu file</small></span></label>
+        <label class="kat"><input type="checkbox" id="out-terpisah" value="terpisah" checked><span>Per Kategori Umur: File Terpisah<small>satu file per kategori: jumlah per KK + daftar nama</small></span></label>
+        <label class="kat"><input type="checkbox" id="out-gabungan" value="gabungan" checked><span>Per Kategori Umur: File Gabungan<small>semua kategori dalam satu file: jumlah per KK + daftar nama berwarna</small></span></label>
       </div>
     </div>
 
@@ -425,7 +425,7 @@ input[type="file"] { display: none; }
     <strong>Format:</strong> Baris <strong>hijau</strong> = Kepala Keluarga, baris putih = anggota keluarga.
     Umur dihitung dari TANGGAL LAHIR (dd-mm-yyyy) pada tanggal acuan.
     Anggota ≥ 18 tahun dihitung ke kolom "Jumlah Anggota Keluarga".
-    File kategori umur berisi jumlah KK di paling atas, lalu per KK jumlah anggota tiap kategori yang dipilih.
+    File kategori umur berisi 2 sheet: "Jumlah per KK" (jumlah KK di paling atas, lalu jumlah anggota per kategori) dan "Daftar Nama" (siapa KK-nya dan siapa anggotanya di tiap kategori, dibedakan warna).
   </div>
 </div>
 

@@ -104,8 +104,8 @@ button:disabled{background:#334155;color:var(--mut);cursor:not-allowed}
     <div id="out-list">
       <label class="kat"><input type="checkbox" id="out-rekap" value="rekap" checked> REKAP lengkap <small>salinan tabel PDF (file paling besar)</small></label>
       <label class="kat"><input type="checkbox" id="out-popm" value="popm" checked> Form POPM: ringkasan KK <small>anggota ≥ 18 tahun</small></label>
-      <label class="kat"><input type="checkbox" id="out-terpisah" value="terpisah" checked> Per kategori umur: file terpisah</label>
-      <label class="kat"><input type="checkbox" id="out-gabungan" value="gabungan" checked> Per kategori umur: file gabungan</label>
+      <label class="kat"><input type="checkbox" id="out-terpisah" value="terpisah" checked> Per kategori umur: file terpisah <small>jumlah per KK + daftar nama</small></label>
+      <label class="kat"><input type="checkbox" id="out-gabungan" value="gabungan" checked> Per kategori umur: file gabungan <small>jumlah per KK + daftar nama berwarna</small></label>
     </div>
 
     <label>3. Kategori umur (untuk file per kategori, bisa lebih dari satu)</label>
